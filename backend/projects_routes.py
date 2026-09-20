@@ -107,10 +107,11 @@ class ProjectTaskCreate(BaseModel):
     # this task is for. The assignee submits that link from My Tasks (see
     # our_tasks_routes calendar-submit), which fills it in on the entry.
     content_calendar_entry_id: Optional[str] = None
-    content_calendar_field: Optional[str] = None  # content_link | creative_link | editing_link | thumbnail_link
+    content_calendar_field: Optional[str] = None  # content_link | creative_link | editing_link | thumbnail_link | posting | post_report
 
 
 CALENDAR_LINK_FIELDS = {"content_link", "creative_link", "editing_link", "thumbnail_link"}
+CALENDAR_TASK_FIELDS = CALENDAR_LINK_FIELDS | {"posting", "post_report"}
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
@@ -794,7 +795,7 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         raise HTTPException(status_code=400, detail="Task name is required")
     if not payload.assigned_to:
         raise HTTPException(status_code=400, detail="assigned_to is required")
-    if payload.content_calendar_field and payload.content_calendar_field not in CALENDAR_LINK_FIELDS:
+    if payload.content_calendar_field and payload.content_calendar_field not in CALENDAR_TASK_FIELDS:
         raise HTTPException(status_code=400, detail="Invalid content calendar field")
     if bool(payload.content_calendar_field) != bool(payload.content_calendar_entry_id):
         raise HTTPException(status_code=400, detail="content_calendar_entry_id and content_calendar_field go together")

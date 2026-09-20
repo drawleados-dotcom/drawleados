@@ -2732,7 +2732,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           })()}
                           {task.content_calendar_field && (
                             <Badge className="text-xs bg-[#ec4899]/20 text-[#ec4899]" data-testid={`calendar-task-badge-${task.task_id}`}>
-                              <CalendarDays className="h-3 w-3 mr-1" />Social Media · {({ content_link: 'Content Link', creative_link: 'Creative Link', editing_link: 'Editing', thumbnail_link: 'Thumbnail' })[task.content_calendar_field] || 'Link'}
+                              <CalendarDays className="h-3 w-3 mr-1" />Social Media · {({ content_link: 'Content Link', creative_link: 'Creative Link', editing_link: 'Editing', thumbnail_link: 'Thumbnail', posting: 'Posting', post_report: 'Post Report' })[task.content_calendar_field] || 'Link'}
                             </Badge>
                           )}
                           {task.project_name && (
@@ -2983,17 +2983,18 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           })()}
                           {mainTab === 'assigned_to_me' && task.status !== 'completed' && !isAwaitingOrApproved(task) && (
                             task.content_calendar_field ? (
-                              // Content Calendar deliverable — done by submitting
-                              // the link (assignee only), not the usual Complete.
+                              // Content Calendar task — done from its own panel (link,
+                              // schedule/post, or report; assignee only), not the usual Complete.
                               task.assigned_to === user?.user_id && (
                                 <Button
                                   size="sm"
                                   className="bg-[#ec4899] hover:bg-[#db2777] text-white h-8 px-3"
                                   onClick={(e) => { e.stopPropagation(); setViewingTask(task); setShowTaskDetailModal(true); }}
                                   data-testid={`submit-link-btn-${task.task_id}`}
-                                  title="Open the post details and submit the link"
+                                  title="Open the post details and complete this task"
                                 >
-                                  <Link className="h-3 w-3 mr-1" /> Submit Link
+                                  <Link className="h-3 w-3 mr-1" />
+                                  {task.content_calendar_field === 'posting' ? 'Schedule / Post' : task.content_calendar_field === 'post_report' ? 'Submit Report' : 'Submit Link'}
                                 </Button>
                               )
                             ) : (

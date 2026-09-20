@@ -3,7 +3,7 @@ Our Tasks Routes - Team-wide task management for all users
 Similar to BDE Tasks but accessible to all team members
 """
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
@@ -752,12 +752,15 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
 
 
 # ============== CONTENT CALENDAR DELIVERABLE TASKS ==============
-# A calendar cell (Content / Creative / Editing / Thumbnail link) can be
-# assigned to a person: that creates a normal project task tagged with the
-# calendar entry + column it's for. These two endpoints power the special
-# view of such a task in the assignee's My Tasks — the post's details, and a
-# way for ONLY the assignee to submit the deliverable link, which fills that
-# column on the calendar entry and completes the task.
+# A calendar cell (Content / Creative / Editing / Thumbnail link, or Posting)
+# can be assigned to a person: that creates a normal project task tagged with
+# the calendar entry + column it's for. The endpoints below power the
+# special view of such a task in the assignee's My Tasks — the post's
+# details, and ONLY the assignee can act on it:
+#   * link tasks    -> calendar-submit  (adds the link, completes the task)
+#   * posting tasks -> calendar-posting (schedule with a date, or mark posted;
+#                      posting spawns the next-day report task)
+#   * post_report   -> calendar-report  (post link + likes/comments/shares/reach)
 
 CALENDAR_LINK_FIELDS = {
     "content_link": "Content Link",
@@ -765,10 +768,38 @@ CALENDAR_LINK_FIELDS = {
     "editing_link": "Editing",
     "thumbnail_link": "Thumbnail",
 }
+CALENDAR_TASK_LABELS = {**CALENDAR_LINK_FIELDS, "posting": "Posting", "post_report": "Post Report"}
+
+
+def _calendar_kind(field: str) -> str:
+    return "posting" if field == "posting" else "report" if field == "post_report" else "link"
+
+
+def _next_day(date_str: Optional[str]) -> str:
+    """The day after a YYYY-MM-DD post date (today+1 if it's missing/bad)."""
+    try:
+        base = datetime.strptime(date_str or "", "%Y-%m-%d")
+    except ValueError:
+        base = datetime.now(timezone.utc).replace(tzinfo=None)
+    return (base + timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 class CalendarSubmitPayload(BaseModel):
     link: str
+
+
+class CalendarPostingPayload(BaseModel):
+    action: str  # "schedule" | "post"
+    scheduled_date: Optional[str] = None  # YYYY-MM-DD, required for schedule
+    scheduled_time: Optional[str] = None  # HH:MM, optional
+
+
+class CalendarReportPayload(BaseModel):
+    post_link: str
+    likes: int = Field(ge=0)
+    comments: int = Field(ge=0)
+    shares: int = Field(ge=0)
+    reach: int = Field(ge=0)
 
 
 async def _calendar_task_and_entry(db, task_id: str):
@@ -777,13 +808,30 @@ async def _calendar_task_and_entry(db, task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     entry_id = task.get("content_calendar_entry_id")
     field = task.get("content_calendar_field")
-    if not entry_id or field not in CALENDAR_LINK_FIELDS:
+    if not entry_id or field not in CALENDAR_TASK_LABELS:
         raise HTTPException(status_code=400, detail="This task isn't linked to a Content Calendar post")
     project = await db.projects.find_one(
         {"project_id": task.get("project_id")}, {"_id": 0, "name": 1, "content_calendar": 1}
     )
     entry = next((e for e in ((project or {}).get("content_calendar") or []) if e.get("id") == entry_id), None)
     return task, project, entry, field
+
+
+def _require_assignee(task, user):
+    # Only the person it's assigned to acts on it.
+    if task.get("assigned_to") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only the assignee can do this")
+
+
+async def _set_entry(db, task, patch: Dict[str, Any]) -> None:
+    """Set fields on the calendar entry this task is linked to."""
+    result = await db.projects.update_one(
+        {"project_id": task.get("project_id"), "content_calendar.id": task["content_calendar_entry_id"]},
+        {"$set": {**{f"content_calendar.$.{k}": v for k, v in patch.items()},
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
 
 
 @our_tasks_router.get("/tasks/{task_id}/calendar-context")
@@ -793,10 +841,19 @@ async def get_calendar_task_context(task_id: str, request: Request):
     task, project, entry, field = await _calendar_task_and_entry(db, task_id)
     if not entry:
         raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
+    kind = _calendar_kind(field)
+    is_assignee = task.get("assigned_to") == user.user_id
+    if kind == "link":
+        # Done tasks are closed — unless the reviewer rejected the link, in
+        # which case the assignee resubmits a fixed one.
+        can_submit = is_assignee and (task.get("status") != "completed" or entry.get(f"{field}_status") == "rejected")
+    else:
+        can_submit = is_assignee and task.get("status") != "completed"
     return {
+        "kind": kind,
         "project_name": (project or {}).get("name"),
         "field": field,
-        "field_label": CALENDAR_LINK_FIELDS[field],
+        "field_label": CALENDAR_TASK_LABELS[field],
         "platform": entry.get("platform"),
         "post_title": entry.get("post_title") or "",
         "post_date": entry.get("post_date"),
@@ -805,14 +862,16 @@ async def get_calendar_task_context(task_id: str, request: Request):
         "hashtags": entry.get("hashtags") or "",
         "keywords": entry.get("keywords") or "",
         "links": {f: (entry.get(f) or "") for f in CALENDAR_LINK_FIELDS},
-        "current_link": entry.get(field) or "",
-        "review_status": entry.get(f"{field}_status") or "pending",
-        "reject_reason": entry.get(f"{field}_reject_reason") or "",
-        # Done tasks are closed — unless the reviewer rejected the link, in
-        # which case the assignee resubmits a fixed one.
-        "can_submit": task.get("assigned_to") == user.user_id and (
-            task.get("status") != "completed" or (entry.get(f"{field}_status") == "rejected")
-        ),
+        "current_link": (entry.get(field) or "") if kind == "link" else "",
+        "review_status": (entry.get(f"{field}_status") or "pending") if kind == "link" else None,
+        "reject_reason": (entry.get(f"{field}_reject_reason") or "") if kind == "link" else "",
+        "entry_status": entry.get("status") or "created",
+        "scheduled_date": entry.get("scheduled_date") or "",
+        "scheduled_time": entry.get("scheduled_time") or "",
+        "post_link": entry.get("post_link") or "",
+        "post_report": entry.get("post_report") or None,
+        "report_due_date": _next_day(entry.get("post_date")),
+        "can_submit": can_submit,
     }
 
 
@@ -821,31 +880,144 @@ async def submit_calendar_task_link(task_id: str, payload: CalendarSubmitPayload
     from server import get_current_user, db
     user = await get_current_user(request)
     task, project, entry, field = await _calendar_task_and_entry(db, task_id)
-
-    # Only the person it's assigned to adds the link and completes the task.
-    if task.get("assigned_to") != user.user_id:
-        raise HTTPException(status_code=403, detail="Only the assignee can submit this link")
+    if field not in CALENDAR_LINK_FIELDS:
+        raise HTTPException(status_code=400, detail="This task isn't a link task")
+    _require_assignee(task, user)
     link = (payload.link or "").strip()
     if not link:
         raise HTTPException(status_code=400, detail="Link is required")
     if not entry:
         raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
 
+    await _set_entry(db, task, {
+        field: link,
+        f"{field}_status": "pending",
+        f"{field}_reject_reason": "",
+        f"{field}_task_status": "completed",
+        f"{field}_submitted_by_name": user.name,
+    })
     now = datetime.now(timezone.utc).isoformat()
-    result = await db.projects.update_one(
-        {"project_id": task.get("project_id"), "content_calendar.id": task["content_calendar_entry_id"]},
-        {"$set": {
-            f"content_calendar.$.{field}": link,
-            f"content_calendar.$.{field}_status": "pending",
-            f"content_calendar.$.{field}_reject_reason": "",
-            f"content_calendar.$.{field}_task_status": "completed",
-            f"content_calendar.$.{field}_submitted_by_name": user.name,
-            "updated_at": now,
-        }},
+    await db.our_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {"status": "completed", "calendar_submitted_link": link, "reference_image": None, "updated_at": now}},
     )
-    if result.matched_count == 0:
+    return await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+
+
+@our_tasks_router.post("/tasks/{task_id}/calendar-posting")
+async def calendar_posting_action(task_id: str, payload: CalendarPostingPayload, request: Request):
+    """The posting assignee either schedules the post (needs a date) or marks
+    it posted. Posting completes this task and creates the next-day report
+    task for the same person; either way the calendar row's status follows."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    task, project, entry, field = await _calendar_task_and_entry(db, task_id)
+    if field != "posting":
+        raise HTTPException(status_code=400, detail="This task isn't a posting task")
+    _require_assignee(task, user)
+    if not entry:
+        raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
+    if task.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="This post is already marked as posted")
+
+    now = datetime.now(timezone.utc).isoformat()
+    if payload.action == "schedule":
+        try:
+            datetime.strptime(payload.scheduled_date or "", "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Pick the date it's scheduled for")
+        if payload.scheduled_time:
+            try:
+                datetime.strptime(payload.scheduled_time, "%H:%M")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Time must look like 14:30")
+        await _set_entry(db, task, {
+            "status": "scheduled",
+            "scheduled_date": payload.scheduled_date,
+            "scheduled_time": payload.scheduled_time or "",
+            "scheduled_by_name": user.name,
+            "posting_task_status": "scheduled",
+        })
+        await db.our_tasks.update_one({"task_id": task_id}, {"$set": {"status": "in_progress", "updated_at": now}})
+    elif payload.action == "post":
+        patch = {
+            "status": "posted",
+            "posted_by_name": user.name,
+            "posted_at": now,
+            "posting_task_status": "completed",
+        }
+        # The day after the post date the same person is asked for the live
+        # link + results, as a task of its own (created once).
+        report_task_id = entry.get("report_task_id")
+        if not report_task_id:
+            title = entry.get("post_title") or "Untitled Post"
+            report_due = _next_day(entry.get("post_date"))
+            report_task_id = f"ot_{uuid.uuid4().hex[:12]}"
+            await db.our_tasks.insert_one({
+                "task_id": report_task_id,
+                "task_name": f"Post Report: {title}",
+                "description": (
+                    f"Submit the live post link and how it did (likes, comments, shares, reach) for: "
+                    f"{title}{' · ' + entry['platform'] if entry.get('platform') else ''}"
+                    f"{' · ' + entry['post_date'] if entry.get('post_date') else ''}"
+                ),
+                "status": "pending",
+                "priority": "medium",
+                "type": "general",
+                "tags": [],
+                "assigned_to": task["assigned_to"],
+                "created_by": user.user_id,
+                "created_by_name": user.name,
+                "due_date": report_due,
+                "work_link": None,
+                "department": "social_media",
+                "category": "Posting Report",
+                "project_id": task.get("project_id"),
+                "project_name": (project or {}).get("name"),
+                "content_calendar_entry_id": task["content_calendar_entry_id"],
+                "content_calendar_field": "post_report",
+                "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
+                "created_at": now,
+                "updated_at": now,
+            })
+            patch.update({
+                "report_task_id": report_task_id,
+                "report_assignee": task["assigned_to"],
+                "report_date": report_due,
+                "report_task_status": "assigned",
+            })
+        await _set_entry(db, task, patch)
+        await db.our_tasks.update_one({"task_id": task_id}, {"$set": {"status": "completed", "reference_image": None, "updated_at": now}})
+    else:
+        raise HTTPException(status_code=400, detail="Action must be 'schedule' or 'post'")
+    return await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+
+
+@our_tasks_router.post("/tasks/{task_id}/calendar-report")
+async def submit_calendar_post_report(task_id: str, payload: CalendarReportPayload, request: Request):
+    """The next-day task: the live post link and the results."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    task, project, entry, field = await _calendar_task_and_entry(db, task_id)
+    if field != "post_report":
+        raise HTTPException(status_code=400, detail="This task isn't a post report task")
+    _require_assignee(task, user)
+    link = (payload.post_link or "").strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="Post link is required")
+    if not entry:
         raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
 
+    now = datetime.now(timezone.utc).isoformat()
+    await _set_entry(db, task, {
+        "post_link": link,
+        "post_report": {
+            "likes": payload.likes, "comments": payload.comments,
+            "shares": payload.shares, "reach": payload.reach,
+            "submitted_by_name": user.name, "submitted_at": now,
+        },
+        "report_task_status": "completed",
+    })
     await db.our_tasks.update_one(
         {"task_id": task_id},
         {"$set": {"status": "completed", "calendar_submitted_link": link, "reference_image": None, "updated_at": now}},

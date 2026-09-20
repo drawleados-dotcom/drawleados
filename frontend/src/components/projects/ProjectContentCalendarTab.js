@@ -40,6 +40,9 @@ const REVIEW_FIELDS = {
 // The four deliverable columns: each can be filled with a link directly, or
 // assigned to someone (a linked task they complete by submitting the link).
 const LINK_FIELDS = ['content_link', 'creative_link', 'editing_link', 'thumbnail_link'];
+// Posting is assignable too (the person schedules/posts it), so its task
+// links back to the entry the same way.
+const LINKED_TASK_FIELDS = [...LINK_FIELDS, 'posting'];
 const REVIEW_STATUS_STYLE = {
   pending: 'text-slate-400',
   approved: 'text-emerald-500',
@@ -227,8 +230,11 @@ export default function ProjectContentCalendarTab({
   // the live post link. Also doubles as a read-only "view" for an
   // already-posted row (who posted it, and the link).
   const [statusPopup, setStatusPopup] = useState(null); // { rowId, mode: 'choose' | 'view' }
+  const [detailsRowId, setDetailsRowId] = useState(null); // View popup: post link + report
   const [statusChoice, setStatusChoice] = useState(''); // 'scheduled' | 'posted'
   const [statusPopupLink, setStatusPopupLink] = useState('');
+  const [statusPopupDate, setStatusPopupDate] = useState('');
+  const [statusPopupTime, setStatusPopupTime] = useState('');
 
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || '';
 
@@ -323,20 +329,23 @@ export default function ProjectContentCalendarTab({
   // re-opens the popup read-only (mode 'view').
   const openStatusPopup = (row) => {
     if (row.status === 'posted') {
-      setStatusPopup({ rowId: row.id, mode: 'view' });
-    } else {
-      setStatusPopup({ rowId: row.id, mode: 'choose' });
+      setDetailsRowId(row.id);
+      return;
     }
+    setStatusPopup({ rowId: row.id, mode: 'choose' });
     setStatusChoice(row.status === 'scheduled' ? 'scheduled' : '');
     setStatusPopupLink(row.post_link || '');
+    setStatusPopupDate(row.scheduled_date || row.post_date || '');
+    setStatusPopupTime(row.scheduled_time || '');
   };
-  const closeStatusPopup = () => { setStatusPopup(null); setStatusChoice(''); setStatusPopupLink(''); };
+  const closeStatusPopup = () => { setStatusPopup(null); setStatusChoice(''); setStatusPopupLink(''); setStatusPopupDate(''); setStatusPopupTime(''); };
   const confirmStatusTransition = async () => {
     if (!statusChoice) { toast.error('Choose Schedule or Published'); return; }
+    if (statusChoice === 'scheduled' && !statusPopupDate) { toast.error('Pick the date it is scheduled for'); return; }
     if (statusChoice === 'posted' && !statusPopupLink.trim()) { toast.error('Post link is required'); return; }
     setSaving(true);
     const patch = statusChoice === 'scheduled'
-      ? { status: 'scheduled', scheduled_by_name: currentUser?.name || '' }
+      ? { status: 'scheduled', scheduled_by_name: currentUser?.name || '', scheduled_date: statusPopupDate, scheduled_time: statusPopupTime }
       : { status: 'posted', posted_by_name: currentUser?.name || '', post_link: statusPopupLink.trim() };
     const next = posts.map(p => (p.id === statusPopup.rowId ? { ...p, ...patch } : p));
     const ok = await persist(next);
@@ -411,7 +420,7 @@ export default function ProjectContentCalendarTab({
     const cfg = FIELD_TASK_CONFIG[field];
     // Link tasks carry which calendar entry + column they're for, so the
     // assignee's My Tasks can show the post's details and take the link.
-    const linked = LINK_FIELDS.includes(field) && entryId;
+    const linked = LINKED_TASK_FIELDS.includes(field) && entryId;
     const res = await axios.post(`${API}/api/projects/${project.project_id}/tasks`, {
       task_name: `${cfg.label}: ${postTitle || 'Untitled Post'}`,
       assigned_to: assignee,
@@ -524,7 +533,7 @@ export default function ProjectContentCalendarTab({
           newEntries.push({
             id: entryIds[platformIdx],
             platform,
-            ...Object.fromEntries(LINK_FIELDS.map(f => [`${f}_task_status`, taskIds[f] && linkEntryId ? 'assigned' : ''])),
+            ...Object.fromEntries(LINKED_TASK_FIELDS.map(f => [`${f}_task_status`, taskIds[f] && linkEntryId ? 'assigned' : ''])),
             post_date: row.post_date,
             post_title: row.post_title,
             content_link: row.content_link,
@@ -595,7 +604,7 @@ export default function ProjectContentCalendarTab({
         const date = updated[`${field}_date`];
         if (assignee && date && !updated[`${field}_task_id`]) {
           updated[`${field}_task_id`] = await createFieldTask({ field, assignee, date, postTitle: updated.post_title, entryId: updated.id });
-          if (LINK_FIELDS.includes(field)) updated[`${field}_task_status`] = 'assigned';
+          if (LINKED_TASK_FIELDS.includes(field)) updated[`${field}_task_status`] = 'assigned';
         }
       }
       const next = posts.map(p => (p.id === updated.id ? updated : p));
@@ -887,6 +896,39 @@ export default function ProjectContentCalendarTab({
                     );
                   };
 
+                  // Posting: the user icon assigns whoever schedules / publishes
+                  // the post. Their My Tasks task carries all the post's
+                  // details; what they do there (schedule / posted) shows here.
+                  const renderPostingCell = (row) => {
+                    const assigneeId = row.posting_assignee;
+                    const hasTask = !!row.posting_task_id && !!assigneeId;
+                    const ts = row.posting_task_status;
+                    const tone = ts === 'completed' ? 'text-emerald-500' : ts === 'scheduled' ? 'text-sky-500' : 'text-amber-500';
+                    const label = ts === 'completed' ? 'Posted' : ts === 'scheduled' ? 'Scheduled' : 'Assigned';
+                    const name = assigneeName(assigneeId);
+                    return (
+                      <div data-testid={`content-calendar-posting-cell-${row.id}`}>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => openAssignPopup(row, 'posting')}
+                            className={`p-1 rounded-md hover:bg-black/5 ${hasTask ? tone : 'text-[#6366f1]'}`}
+                            title={hasTask ? `Posting assigned to ${name || 'someone'}` : 'Assign posting to someone'}
+                            data-testid={`content-calendar-assign-posting-${row.id}`}
+                          >
+                            {hasTask ? <User className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                          </button>
+                        ) : !hasTask && <span className={`text-xs ${textSecondary}`}>—</span>}
+                        {hasTask && (
+                          <>
+                            <p className={`text-[10px] font-medium ${tone}`}>{name || 'Assigned'} · {label}</p>
+                            {row.posting_date && ts !== 'completed' && <p className={`text-[10px] ${textSecondary}`}>Due {row.posting_date}</p>}
+                          </>
+                        )}
+                      </div>
+                    );
+                  };
+
                   const renderPostRow = (row, idx) => {
                   const isEditing = editingId === row.id;
                   const buf = isEditing ? editBuffer : row;
@@ -985,17 +1027,35 @@ export default function ProjectContentCalendarTab({
                         >
                           {STATUS_LABEL[row.status] || 'Created'}
                         </button>
+                        {row.status === 'scheduled' && row.scheduled_date && (
+                          <p className="text-[10px] mt-0.5 text-amber-500" data-testid={`content-calendar-scheduled-for-${row.id}`}>
+                            For {row.scheduled_date}{row.scheduled_time ? ` · ${row.scheduled_time}` : ''}
+                          </p>
+                        )}
+                        {row.status === 'posted' && (
+                          <div className="flex items-center gap-2 mt-1">
+                            {row.post_link && (
+                              <a href={row.post_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline" data-testid={`content-calendar-post-link-${row.id}`}>
+                                Post <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setDetailsRowId(row.id)}
+                              className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline"
+                              data-testid={`content-calendar-view-${row.id}`}
+                            >
+                              <Eye className="h-3 w-3" /> View
+                            </button>
+                          </div>
+                        )}
+                        {row.status === 'posted' && !row.post_report && row.report_task_id && (
+                          <p className={`text-[10px] mt-0.5 ${textSecondary}`}>Report due {row.report_date}</p>
+                        )}
                       </td>
                       <td className="p-3">
-                        {isEditing ? (
-                          <AssigneeDateEditor field="posting" value={buf} onChange={patchBuf} />
-                        ) : row.posting_assignee || row.posting_date ? (
-                          <p className={`text-xs ${textPrimary}`}>
-                            {assigneeName(row.posting_assignee) || 'Unassigned'}{row.posting_date ? ` · ${row.posting_date}` : ''}
-                          </p>
-                        ) : (
-                          <span className={`text-xs ${textSecondary}`}>—</span>
-                        )}
+                        {renderPostingCell(row)}
+                        {isEditing && <AssigneeDateEditor field="posting" value={buf} onChange={patchBuf} />}
                       </td>
                       <td className="p-3 text-right">
                         {isEditing ? (
@@ -1397,7 +1457,7 @@ export default function ProjectContentCalendarTab({
         const row = posts.find(p => p.id === assignPopup.rowId);
         if (!row) return null;
         const field = assignPopup.field;
-        const cfg = REVIEW_FIELDS[field];
+        const cfg = REVIEW_FIELDS[field] || { label: 'Posting' };
         const otherLinks = LINK_FIELDS.filter(f => f !== field && row[f]);
         const existingAssignee = row[`${field}_task_id`] ? assigneeName(row[`${field}_assignee`]) : '';
         const platformLabel = PLATFORMS.find(pl => pl.id === row.platform)?.label || row.platform || '—';
@@ -1516,8 +1576,83 @@ export default function ProjectContentCalendarTab({
         </div>
       )}
 
+      {/* View popup — everything about a posted post: who/when, the live link
+          and the report (likes / comments / shares / reach) as a 2x2. */}
+      {detailsRowId && (() => {
+        const row = posts.find(p => p.id === detailsRowId);
+        if (!row) return null;
+        const platformLabel = PLATFORMS.find(pl => pl.id === row.platform)?.label || row.platform || '—';
+        const report = row.post_report;
+        const stat = (label, value) => (
+          <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3 text-center`} data-testid={`content-calendar-report-${label.toLowerCase()}`}>
+            <p className={`text-xs ${textSecondary}`}>{label}</p>
+            <p className={`text-2xl font-bold ${textPrimary}`}>{Number(value ?? 0).toLocaleString()}</p>
+          </div>
+        );
+        const line = (label, value) => (
+          <div className="flex justify-between gap-3 text-sm">
+            <span className={textSecondary}>{label}</span>
+            <span className={`${textPrimary} text-right`}>{value || '—'}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setDetailsRowId(null)}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()} data-testid="content-calendar-view-popup">
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}><Eye className="h-4 w-4" /> Post Details</h3>
+                <button onClick={() => setDetailsRowId(null)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="space-y-1.5">
+                  {line('Post Title', row.post_title)}
+                  {line('Platform', platformLabel)}
+                  {line('Post Date', row.post_date ? `${row.post_date} · ${dayOfWeek(row.post_date)}` : '')}
+                  {line('Status', STATUS_LABEL[row.status] || 'Created')}
+                  {row.scheduled_date && line('Scheduled for', `${row.scheduled_date}${row.scheduled_time ? ` · ${row.scheduled_time}` : ''}${row.scheduled_by_name ? ` (${row.scheduled_by_name})` : ''}`)}
+                  {line('Published by', row.posted_by_name)}
+                  {row.posted_at && line('Published at', new Date(row.posted_at).toLocaleString())}
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className={textSecondary}>Post Link</span>
+                    {row.post_link ? (
+                      <a href={row.post_link} target="_blank" rel="noreferrer" className="text-[#6366f1] hover:underline inline-flex items-center gap-1 break-all text-right">
+                        Open <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    ) : <span className={textPrimary}>—</span>}
+                  </div>
+                </div>
+                <div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary} mb-2`}>Report</p>
+                  {report ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        {stat('Likes', report.likes)}
+                        {stat('Comments', report.comments)}
+                        {stat('Shares', report.shares)}
+                        {stat('Reach', report.reach)}
+                      </div>
+                      <p className={`text-[11px] ${textSecondary} mt-2`}>
+                        Reported by {report.submitted_by_name || '—'}{report.submitted_at ? ` · ${new Date(report.submitted_at).toLocaleDateString()}` : ''}
+                      </p>
+                    </>
+                  ) : (
+                    <div className={`rounded-lg border border-dashed ${borderColor} p-4 text-center text-sm ${textSecondary}`}>
+                      {row.report_task_id
+                        ? `Report not submitted yet — ${assigneeName(row.report_assignee) || 'the poster'} is asked for it on ${row.report_date || 'the next day'}.`
+                        : 'No report yet.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className={`flex justify-end p-4 border-t ${borderColor}`}>
+                <Button type="button" variant="outline" onClick={() => setDetailsRowId(null)}>Close</Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Status popup — Schedule (auto-stamps who) or Published (asks for the
-          live post link); read-only view once published. */}
+          live post link). */}
       {statusPopup && (() => {
         const row = posts.find(p => p.id === statusPopup.rowId);
         const choiceBtn = (value, label) => (
@@ -1539,7 +1674,6 @@ export default function ProjectContentCalendarTab({
             <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
               <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
                 <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-                  {statusPopup.mode === 'view' && <Eye className="h-4 w-4" />}
                   Post Status
                 </h3>
                 <button onClick={closeStatusPopup} className={textSecondary}><X className="h-5 w-5" /></button>
@@ -1552,9 +1686,19 @@ export default function ProjectContentCalendarTab({
                       {choiceBtn('posted', 'Published')}
                     </div>
                     {statusChoice === 'scheduled' && (
-                      <p className={`text-sm ${textSecondary}`}>
-                        Scheduling this post as <b className={textPrimary}>{currentUser?.name || 'you'}</b>.
-                      </p>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className={textPrimary}>Scheduled Date <span className="text-red-500">*</span></Label>
+                            <Input type="date" value={statusPopupDate} onChange={(e) => setStatusPopupDate(e.target.value)} className={inputCls} data-testid="content-calendar-schedule-date" />
+                          </div>
+                          <div>
+                            <Label className={textSecondary}>Time (optional)</Label>
+                            <Input type="time" value={statusPopupTime} onChange={(e) => setStatusPopupTime(e.target.value)} className={inputCls} />
+                          </div>
+                        </div>
+                        <p className={`text-xs ${textSecondary}`}>Scheduling as <b className={textPrimary}>{currentUser?.name || 'you'}</b>.</p>
+                      </div>
                     )}
                     {statusChoice === 'posted' && (
                       <div>
@@ -1572,25 +1716,12 @@ export default function ProjectContentCalendarTab({
                     )}
                   </>
                 )}
-                {statusPopup.mode === 'view' && (
-                  <>
-                    <p className={`text-sm ${textSecondary}`}>Scheduled by <b className={textPrimary}>{row?.scheduled_by_name || '—'}</b></p>
-                    <p className={`text-sm ${textSecondary}`}>Published by <b className={textPrimary}>{row?.posted_by_name || '—'}</b></p>
-                    {row?.post_link ? (
-                      <a href={row.post_link} target="_blank" rel="noreferrer" className="text-sm text-[#6366f1] hover:underline break-all block">{row.post_link}</a>
-                    ) : (
-                      <p className={`text-sm ${textSecondary}`}>No post link yet</p>
-                    )}
-                  </>
-                )}
               </div>
               <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
-                <Button type="button" variant="outline" onClick={closeStatusPopup}>{statusPopup.mode === 'view' ? 'Close' : 'Cancel'}</Button>
-                {statusPopup.mode !== 'view' && (
-                  <Button type="button" onClick={confirmStatusTransition} disabled={saving || !statusChoice} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-status-confirm">
-                    {saving ? 'Saving…' : statusChoice === 'posted' ? 'Confirm Published' : 'Confirm Schedule'}
-                  </Button>
-                )}
+                <Button type="button" variant="outline" onClick={closeStatusPopup}>Cancel</Button>
+                <Button type="button" onClick={confirmStatusTransition} disabled={saving || !statusChoice} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-status-confirm">
+                  {saving ? 'Saving…' : statusChoice === 'posted' ? 'Confirm Published' : 'Confirm Schedule'}
+                </Button>
               </div>
             </div>
           </div>
