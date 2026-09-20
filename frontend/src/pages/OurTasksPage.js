@@ -10,11 +10,13 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { SearchableSelect } from '../components/ui/searchable-select';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Checkbox } from '../components/ui/checkbox';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle,
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff, ChevronDown
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -80,6 +82,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  // Assign to Team's Create Task can target several people at once — one
+  // task is created per selected user (each keeps its own status/timer).
+  const [assigneeIds, setAssigneeIds] = useState([]);
   const [filter, setFilter] = useState('all');
   // Remembers the last main tab across a hard refresh (localStorage) so a refresh
   // while on Operations/Projects doesn't drop the user back to My Tasks. Never
@@ -636,9 +641,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       const payload = { ...formData };
       if (mainTab !== 'assign_to_team') {
         payload.assigned_to = user?.user_id;
+        await axios.post(`${API}/api/our-tasks/tasks`, payload, { headers });
+        toast.success('Task created successfully');
+      } else {
+        // No one picked → backend defaults the assignee to the creator,
+        // same as the old single-select left empty.
+        const targets = assigneeIds.length > 0 ? assigneeIds : [''];
+        const results = await Promise.allSettled(
+          targets.map(uid => axios.post(`${API}/api/our-tasks/tasks`, { ...payload, assigned_to: uid }, { headers }))
+        );
+        const failed = results.filter(r => r.status === 'rejected');
+        if (failed.length === results.length) throw failed[0].reason;
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${results.length} tasks failed to create`);
+        } else {
+          toast.success(results.length > 1 ? `Task created for ${results.length} people` : 'Task created successfully');
+        }
       }
-      await axios.post(`${API}/api/our-tasks/tasks`, payload, { headers });
-      toast.success('Task created successfully');
       setShowCreateModal(false);
       resetForm();
       loadTasks();
@@ -1276,6 +1295,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
   const resetForm = () => {
+    setAssigneeIds([]);
     setFormData({
       task_name: '',
       description: '',
@@ -3087,23 +3107,65 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </div>
                     {/* Assign To — shown ONLY in the "Assign to Team" tab.
                         In My Tasks (and other tabs), the assignee is always the current user. */}
-                    {mainTab === 'assign_to_team' && (
-                      <div>
-                        <Label className={textPrimary}>Assign To</Label>
-                        <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
-                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                            <SelectValue placeholder="Select user" />
-                          </SelectTrigger>
-                          <SelectContent className={bgCard}>
-                            {users
-                              .filter(u => formData.department !== 'management' || !formData.sub_department_id || userHasManagementSubDept(u.user_id, formData.sub_department_id))
-                              .map(u => (
-                                <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                    {mainTab === 'assign_to_team' && (() => {
+                      const assignable = users.filter(u => formData.department !== 'management' || !formData.sub_department_id || userHasManagementSubDept(u.user_id, formData.sub_department_id));
+                      if (editingTask) {
+                        // An existing task belongs to exactly one assignee.
+                        return (
+                          <div>
+                            <Label className={textPrimary}>Assign To</Label>
+                            <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
+                              <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                                <SelectValue placeholder="Select user" />
+                              </SelectTrigger>
+                              <SelectContent className={bgCard}>
+                                {assignable.map(u => (
+                                  <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      }
+                      const selectedNames = assignable.filter(u => assigneeIds.includes(u.user_id)).map(u => u.name);
+                      return (
+                        <div>
+                          <Label className={textPrimary}>Assign To <span className={`text-xs ${textSecondary}`}>(select one or more)</span></Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className={`w-full h-10 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm text-left flex items-center justify-between`}
+                                data-testid="create-task-assignees"
+                              >
+                                <span className={`truncate ${selectedNames.length === 0 ? textSecondary : ''}`}>
+                                  {selectedNames.length === 0 ? 'Select users' : selectedNames.length <= 2 ? selectedNames.join(', ') : `${selectedNames.length} users selected`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 opacity-60 shrink-0" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className={`w-[--radix-popover-trigger-width] p-1 max-h-72 overflow-y-auto ${bgCard}`} align="start">
+                              {assignable.map(u => {
+                                const checked = assigneeIds.includes(u.user_id);
+                                return (
+                                  <label
+                                    key={u.user_id}
+                                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-sm ${textPrimary} ${hoverBg}`}
+                                    data-testid={`create-task-assignee-${u.user_id}`}
+                                  >
+                                    <Checkbox
+                                      checked={checked}
+                                      onCheckedChange={(c) => setAssigneeIds(prev => (c ? [...prev, u.user_id] : prev.filter(id => id !== u.user_id)))}
+                                    />
+                                    {u.name}
+                                  </label>
+                                );
+                              })}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      );
+                    })()}
                     <div>
                       <Label className={textPrimary}>Status</Label>
                       <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
