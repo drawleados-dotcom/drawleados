@@ -1814,8 +1814,12 @@ export default function ProjectsPanel({
           // Scope tab only renders for SEO-department projects
           const isSeoProject = (selectedProject?.departments || []).includes('seo');
           const innerTabs = [
-            // Tasks leads every project type — the department-specific tabs
-            // (ERP Users/Departments/Others, Website Pages/Others) follow it.
+            // Content Calendar leads for Social Media projects, then Tasks —
+            // the department-specific tabs (ERP Users/Departments/Others,
+            // Website Pages/Others) follow it, per requested order: Content
+            // Calendar, Tasks, Expense, Payment Schedule, ..., Delivery
+            // History, Daily Notes.
+            ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isErpProject ? [{ id: 'erp_departments', label: 'Departments', icon: Building2 }] : []),
@@ -1826,11 +1830,8 @@ export default function ProjectsPanel({
             ...(isWebsiteProject ? [{ id: 'single_product_pages', label: 'Single Product Pages', icon: ShoppingBag }] : []),
             ...(isWebsiteProject ? [{ id: 'features', label: 'Features', icon: Sparkles }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
-            // Daily Notes — universal, every project regardless of department.
-            { id: 'daily_notes', label: 'Daily Notes', icon: NotebookPen },
-            ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
-            ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
+            ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(isSeoProject ? [{ id: 'seo_scope', label: 'Scope', icon: Target }] : []),
             ...(isSeoProject ? [{ id: 'backlinks', label: 'Backlinks', icon: Link2 }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
@@ -1838,8 +1839,10 @@ export default function ProjectsPanel({
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'daily_optimization', label: 'Daily Optimization', icon: Zap }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
-            // Delivery Date History — universal, every project regardless of department.
+            // Delivery Date History, then Daily Notes — both universal,
+            // every project regardless of department.
             { id: 'delivery_history', label: 'Delivery History', icon: History },
+            { id: 'daily_notes', label: 'Daily Notes', icon: NotebookPen },
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
