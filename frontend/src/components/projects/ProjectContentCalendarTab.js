@@ -8,7 +8,8 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar, Linkedin, Send } from 'lucide-react';
+import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar, Linkedin, Send, Check, Ban, Eye, Hash } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -23,8 +24,22 @@ const PLATFORMS = [
   { id: 'youtube', label: 'YouTube' },
 ];
 
-const POST_TYPES = ['static', 'carousel', 'reel'];
-const POST_TYPE_LABEL = { static: 'Static', carousel: 'Carousel', reel: 'Reel' };
+const POST_TYPES = ['static', 'reel', 'carousel', 'ig', 'long_video'];
+const POST_TYPE_LABEL = { static: 'Static', reel: 'Reel', carousel: 'Carousel', ig: 'IG', long_video: 'Long Video' };
+
+// Post Title / Content Link / Creative Link are each reviewed independently —
+// their own approve/reject state and (on reject) a required reason, shown
+// via a popup rather than squeezed into the table cell.
+const REVIEW_FIELDS = {
+  post_title: { label: 'Post Title', kind: 'text', placeholder: 'Post title' },
+  content_link: { label: 'Content Link', kind: 'url', placeholder: 'https://...' },
+  creative_link: { label: 'Creative Link', kind: 'url', placeholder: 'https://...' },
+};
+const REVIEW_STATUS_STYLE = {
+  pending: 'text-slate-400',
+  approved: 'text-emerald-500',
+  rejected: 'text-red-500',
+};
 
 const STATUS_FLOW = ['created', 'scheduled', 'posted'];
 const STATUS_LABEL = { created: 'Created', scheduled: 'Scheduled', posted: 'Posted' };
@@ -33,11 +48,6 @@ const STATUS_STYLE = {
   scheduled: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
   posted: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
 };
-const nextStatus = (s) => {
-  const i = STATUS_FLOW.indexOf(s || 'created');
-  return STATUS_FLOW[(i + 1) % STATUS_FLOW.length];
-};
-
 // Each of these fields can be independently assigned + dated. Setting both
 // on save auto-creates a real Operations task for that person (Department =
 // Social Media), so the work shows up in their My Tasks. `posting` has no
@@ -79,6 +89,17 @@ const emptyDraftRow = (platform, defaultDate) => ({
   creative_link_date: '',
   posting_assignee: '',
   posting_date: '',
+  hashtags: '',
+  keywords: '',
+  post_title_status: 'pending',
+  post_title_reject_reason: '',
+  content_link_status: 'pending',
+  content_link_reject_reason: '',
+  creative_link_status: 'pending',
+  creative_link_reject_reason: '',
+  scheduled_by_name: '',
+  posted_by_name: '',
+  post_link: '',
 });
 
 export default function ProjectContentCalendarTab({
@@ -96,6 +117,7 @@ export default function ProjectContentCalendarTab({
 }) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
   const headers = { Authorization: `Bearer ${token}` };
+  const { user: currentUser } = useAuth();
 
   const [subTab, setSubTab] = useState('all');
   const posts = project?.content_calendar || [];
@@ -153,7 +175,113 @@ export default function ProjectContentCalendarTab({
   const [editingId, setEditingId] = useState(null);
   const [editBuffer, setEditBuffer] = useState(null);
 
+  // Post Title / Content Link / Creative Link popup — either editing an
+  // existing row's field (with Approve/Reject) or, for an empty day's
+  // "+ Add Post", creating a brand new row from just that field's value.
+  const [fieldPopup, setFieldPopup] = useState(null); // { rowId, field, isNewRow, dateIso }
+  const [fieldPopupValue, setFieldPopupValue] = useState('');
+  const [fieldPopupRejectReason, setFieldPopupRejectReason] = useState('');
+  const [fieldPopupShowReject, setFieldPopupShowReject] = useState(false);
+
+  // Description / Hashtags / Keywords popup.
+  const [descPopupRowId, setDescPopupRowId] = useState(null);
+  const [descPopupValue, setDescPopupValue] = useState({ description: '', hashtags: '', keywords: '' });
+
+  // Status transition popup — Schedule auto-stamps who; Posted also needs
+  // the live post link. Also doubles as a read-only "view" for an
+  // already-posted row (who posted it, and the link).
+  const [statusPopup, setStatusPopup] = useState(null); // { rowId, mode: 'schedule' | 'post' | 'view' }
+  const [statusPopupLink, setStatusPopupLink] = useState('');
+
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || '';
+
+  const openFieldPopup = (row, field, isNewRow = false, dateIso = null) => {
+    setFieldPopup({ rowId: row?.id || null, field, isNewRow, dateIso });
+    setFieldPopupValue(row ? (row[field] || '') : '');
+    setFieldPopupRejectReason(row ? (row[`${field}_reject_reason`] || '') : '');
+    setFieldPopupShowReject(false);
+  };
+  const closeFieldPopup = () => {
+    setFieldPopup(null);
+    setFieldPopupValue('');
+    setFieldPopupRejectReason('');
+    setFieldPopupShowReject(false);
+  };
+
+  // Just saves the text/link value, leaving review status untouched — for
+  // the initial "create a row from this field" flow, and for editing the
+  // value of an already-reviewed field without re-triggering approve/reject.
+  const saveFieldPopupValue = async () => {
+    if (fieldPopup.isNewRow) {
+      if (!fieldPopupValue.trim()) { toast.error(`${REVIEW_FIELDS[fieldPopup.field].label} is required`); return; }
+      const newRow = { ...emptyDraftRow(subTab, fieldPopup.dateIso), [fieldPopup.field]: fieldPopupValue.trim() };
+      setSaving(true);
+      const ok = await persist([...posts, newRow]);
+      setSaving(false);
+      if (ok) { toast.success('Post added'); closeFieldPopup(); }
+      return;
+    }
+    setSaving(true);
+    const next = posts.map(p => (p.id === fieldPopup.rowId ? { ...p, [fieldPopup.field]: fieldPopupValue } : p));
+    const ok = await persist(next);
+    setSaving(false);
+    if (ok) { toast.success('Saved'); closeFieldPopup(); }
+  };
+
+  const setFieldReview = async (statusValue, reason = '') => {
+    if (!fieldPopupValue.trim()) { toast.error(`${REVIEW_FIELDS[fieldPopup.field].label} is required`); return; }
+    setSaving(true);
+    const next = posts.map(p => (p.id === fieldPopup.rowId
+      ? { ...p, [fieldPopup.field]: fieldPopupValue, [`${fieldPopup.field}_status`]: statusValue, [`${fieldPopup.field}_reject_reason`]: reason }
+      : p));
+    const ok = await persist(next);
+    setSaving(false);
+    if (ok) {
+      toast.success(statusValue === 'approved' ? 'Approved' : 'Rejected');
+      closeFieldPopup();
+    }
+  };
+
+  const openDescPopup = (row) => {
+    setDescPopupRowId(row.id);
+    setDescPopupValue({ description: row.description || '', hashtags: row.hashtags || '', keywords: row.keywords || '' });
+  };
+  const closeDescPopup = () => { setDescPopupRowId(null); setDescPopupValue({ description: '', hashtags: '', keywords: '' }); };
+  const saveDescPopup = async () => {
+    setSaving(true);
+    const next = posts.map(p => (p.id === descPopupRowId ? { ...p, ...descPopupValue } : p));
+    const ok = await persist(next);
+    setSaving(false);
+    if (ok) { toast.success('Saved'); closeDescPopup(); }
+  };
+
+  // Created -> Scheduled -> Posted. Scheduled auto-stamps the current user;
+  // Posted needs the actual post link, asked for in the popup. Clicking an
+  // already-posted pill re-opens the same popup read-only (mode 'view').
+  const openStatusPopup = (row) => {
+    if (row.status === 'created') {
+      setStatusPopup({ rowId: row.id, mode: 'schedule' });
+      setStatusPopupLink('');
+    } else if (row.status === 'scheduled') {
+      setStatusPopup({ rowId: row.id, mode: 'post' });
+      setStatusPopupLink(row.post_link || '');
+    } else {
+      setStatusPopup({ rowId: row.id, mode: 'view' });
+      setStatusPopupLink(row.post_link || '');
+    }
+  };
+  const closeStatusPopup = () => { setStatusPopup(null); setStatusPopupLink(''); };
+  const confirmStatusTransition = async () => {
+    if (statusPopup.mode === 'post' && !statusPopupLink.trim()) { toast.error('Post link is required'); return; }
+    setSaving(true);
+    const patch = statusPopup.mode === 'schedule'
+      ? { status: 'scheduled', scheduled_by_name: currentUser?.name || '' }
+      : { status: 'posted', posted_by_name: currentUser?.name || '', post_link: statusPopupLink.trim() };
+    const next = posts.map(p => (p.id === statusPopup.rowId ? { ...p, ...patch } : p));
+    const ok = await persist(next);
+    setSaving(false);
+    if (ok) { toast.success(statusPopup.mode === 'schedule' ? 'Scheduled' : 'Marked as Posted'); closeStatusPopup(); }
+  };
 
   // LinkedIn "Publish Now" — first slice of the LinkedIn auto-scheduling
   // plan (no background scheduler yet). Posts as the CURRENT user's own
@@ -241,13 +369,6 @@ export default function ProjectContentCalendarTab({
     setCollapsedIds([]);
     setShowAddModal(true);
   };
-  // Opened from a specific day's row — the post date is fixed to that day
-  // rather than defaulting to today/1st of month.
-  const openAddModalForDate = (dateIso) => {
-    setDraftRows([emptyDraftRow(subTab, dateIso)]);
-    setCollapsedIds([]);
-    setShowAddModal(true);
-  };
   const closeAddModal = () => { setShowAddModal(false); setDraftRows([]); setCollapsedIds([]); };
   // Adding a new post collapses every existing one, so only the post being
   // worked on right now stays expanded.
@@ -308,6 +429,17 @@ export default function ProjectContentCalendarTab({
             posting_assignee: row.posting_assignee,
             posting_date: row.posting_date,
             posting_task_id: taskIds.posting || null,
+            hashtags: row.hashtags,
+            keywords: row.keywords,
+            post_title_status: row.post_title_status || 'pending',
+            post_title_reject_reason: row.post_title_reject_reason || '',
+            content_link_status: row.content_link_status || 'pending',
+            content_link_reject_reason: row.content_link_reject_reason || '',
+            creative_link_status: row.creative_link_status || 'pending',
+            creative_link_reject_reason: row.creative_link_reject_reason || '',
+            scheduled_by_name: row.scheduled_by_name || '',
+            posted_by_name: row.posted_by_name || '',
+            post_link: row.post_link || '',
           });
         }
       }
@@ -353,11 +485,6 @@ export default function ProjectContentCalendarTab({
     const ok = await persist(next);
     if (ok) toast.success('Removed');
   };
-  const cycleStatus = async (row) => {
-    const next = posts.map(p => (p.id === row.id ? { ...p, status: nextStatus(p.status) } : p));
-    await persist(next);
-  };
-
   const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
   const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
   const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
@@ -529,6 +656,38 @@ export default function ProjectContentCalendarTab({
               </thead>
               <tbody>
                 {(() => {
+                  const renderReviewCell = (row, field) => {
+                    const cfg = REVIEW_FIELDS[field];
+                    const value = row[field];
+                    const status = row[`${field}_status`] || 'pending';
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => canEdit && openFieldPopup(row, field)}
+                        disabled={!canEdit}
+                        className="text-left w-full group"
+                        data-testid={`content-calendar-open-${field}-${row.id}`}
+                      >
+                        {value ? (
+                          cfg.kind === 'url' ? (
+                            <span className="text-xs text-[#6366f1] group-hover:underline break-all">Open</span>
+                          ) : (
+                            <span className={`text-sm ${textPrimary}`}>{value}</span>
+                          )
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-[#6366f1]">
+                            <Plus className="h-3.5 w-3.5" /> Add {cfg.label}
+                          </span>
+                        )}
+                        {value && (
+                          <span className={`block text-[10px] mt-0.5 font-medium ${REVIEW_STATUS_STYLE[status]}`}>
+                            {status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending review'}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  };
+
                   const renderPostRow = (row, idx) => {
                   const isEditing = editingId === row.id;
                   const buf = isEditing ? editBuffer : row;
@@ -555,15 +714,7 @@ export default function ProjectContentCalendarTab({
                       </td>
                       <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(isEditing ? editBuffer.post_date : row.post_date)}</td>
                       <td className="p-3">
-                        {isEditing ? (
-                          <Input
-                            value={editBuffer.post_title}
-                            onChange={(e) => setEditBuffer(b => ({ ...b, post_title: e.target.value }))}
-                            className={inputCls}
-                          />
-                        ) : (
-                          <span className={`text-sm ${textPrimary}`}>{row.post_title || '—'}</span>
-                        )}
+                        {renderReviewCell(row, 'post_title')}
                         {isEditing ? (
                           <AssigneeDateEditor field="post_title" value={buf} onChange={patchBuf} />
                         ) : (
@@ -571,17 +722,7 @@ export default function ProjectContentCalendarTab({
                         )}
                       </td>
                       <td className="p-3">
-                        {isEditing ? (
-                          <Input
-                            value={editBuffer.content_link}
-                            onChange={(e) => setEditBuffer(b => ({ ...b, content_link: e.target.value }))}
-                            className={inputCls}
-                          />
-                        ) : row.content_link ? (
-                          <a href={row.content_link} target="_blank" rel="noreferrer" className="text-xs text-[#6366f1] hover:underline">Open</a>
-                        ) : (
-                          <span className={`text-xs ${textSecondary}`}>—</span>
-                        )}
+                        {renderReviewCell(row, 'content_link')}
                         {isEditing ? (
                           <AssigneeDateEditor field="content_link" value={buf} onChange={patchBuf} />
                         ) : (
@@ -589,17 +730,7 @@ export default function ProjectContentCalendarTab({
                         )}
                       </td>
                       <td className="p-3">
-                        {isEditing ? (
-                          <Input
-                            value={editBuffer.creative_link}
-                            onChange={(e) => setEditBuffer(b => ({ ...b, creative_link: e.target.value }))}
-                            className={inputCls}
-                          />
-                        ) : row.creative_link ? (
-                          <a href={row.creative_link} target="_blank" rel="noreferrer" className="text-xs text-[#6366f1] hover:underline">Open</a>
-                        ) : (
-                          <span className={`text-xs ${textSecondary}`}>—</span>
-                        )}
+                        {renderReviewCell(row, 'creative_link')}
                         {isEditing ? (
                           <AssigneeDateEditor field="creative_link" value={buf} onChange={patchBuf} />
                         ) : (
@@ -607,37 +738,50 @@ export default function ProjectContentCalendarTab({
                         )}
                       </td>
                       <td className="p-3 max-w-[280px]">
-                        {isEditing ? (
-                          <Textarea
-                            value={editBuffer.description}
-                            onChange={(e) => setEditBuffer(b => ({ ...b, description: e.target.value }))}
-                            className={`text-xs ${bgSecondary} border ${borderColor} ${textPrimary} min-h-[60px]`}
-                          />
-                        ) : (
-                          <p className={`text-xs ${textSecondary} line-clamp-2 whitespace-pre-wrap`}>{row.description || '—'}</p>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => canEdit && openDescPopup(row)}
+                          disabled={!canEdit}
+                          className="text-left w-full"
+                          data-testid={`content-calendar-open-description-${row.id}`}
+                        >
+                          {row.description || row.hashtags || row.keywords ? (
+                            <>
+                              <p className={`text-xs ${textSecondary} line-clamp-2 whitespace-pre-wrap`}>{row.description || '—'}</p>
+                              {row.hashtags && <p className="text-[10px] text-[#6366f1] line-clamp-1">{row.hashtags}</p>}
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-[#6366f1]">
+                              <Plus className="h-3.5 w-3.5" /> Add
+                            </span>
+                          )}
+                        </button>
                       </td>
                       <td className="p-3">
-                        {isEditing ? (
-                          <Select value={editBuffer.post_type} onValueChange={(v) => setEditBuffer(b => ({ ...b, post_type: v }))}>
-                            <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-xs">{POST_TYPE_LABEL[row.post_type] || '—'}</span>
-                        )}
+                        <Select
+                          value={row.post_type}
+                          onValueChange={async (v) => {
+                            if (!canEdit) return;
+                            const next = posts.map(p => (p.id === row.id ? { ...p, post_type: v } : p));
+                            await persist(next);
+                          }}
+                          disabled={!canEdit}
+                        >
+                          <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-post-type-${row.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td className="p-3">
                         <button
                           type="button"
-                          onClick={() => canEdit && !isEditing && cycleStatus(row)}
-                          disabled={!canEdit || isEditing}
-                          title={canEdit && !isEditing ? 'Click to advance status' : 'Read only'}
-                          className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[row.status] || STATUS_STYLE.created} ${canEdit && !isEditing ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
+                          onClick={() => canEdit && openStatusPopup(row)}
+                          disabled={!canEdit}
+                          title={canEdit ? 'Click to advance / view status' : 'Read only'}
+                          className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[row.status] || STATUS_STYLE.created} ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
                           data-testid={`content-calendar-status-${row.id}`}
                         >
                           {STATUS_LABEL[row.status] || 'Created'}
@@ -724,7 +868,7 @@ export default function ProjectContentCalendarTab({
                             {canEdit ? (
                               <button
                                 type="button"
-                                onClick={() => openAddModalForDate(iso)}
+                                onClick={() => openFieldPopup(null, 'post_title', true, iso)}
                                 className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
                                 data-testid={`content-calendar-add-for-day-${iso}`}
                               >
@@ -929,6 +1073,191 @@ export default function ProjectContentCalendarTab({
           </div>
         </div>
       )}
+
+      {/* Post Title / Content Link / Creative Link popup — value entry plus,
+          once the field belongs to a real row, its own Approve/Reject. */}
+      {fieldPopup && (() => {
+        const cfg = REVIEW_FIELDS[fieldPopup.field];
+        const popupRow = !fieldPopup.isNewRow ? posts.find(p => p.id === fieldPopup.rowId) : null;
+        const popupStatus = popupRow?.[`${fieldPopup.field}_status`] || 'pending';
+        const showReject = fieldPopupShowReject || popupStatus === 'rejected';
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeFieldPopup}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+                <h3 className={`text-base font-semibold ${textPrimary}`}>{cfg.label}</h3>
+                <button onClick={closeFieldPopup} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div>
+                  <Label className={textPrimary}>{cfg.label}</Label>
+                  <Input
+                    value={fieldPopupValue}
+                    onChange={(e) => setFieldPopupValue(e.target.value)}
+                    placeholder={cfg.placeholder}
+                    className={inputCls}
+                    data-testid="content-calendar-field-popup-input"
+                    autoFocus
+                  />
+                </div>
+                {!fieldPopup.isNewRow && (
+                  <div>
+                    <p className={`text-xs ${textSecondary} mb-1`}>
+                      Review — <span className={REVIEW_STATUS_STYLE[popupStatus]}>{popupStatus === 'approved' ? 'Approved' : popupStatus === 'rejected' ? 'Rejected' : 'Pending'}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" size="sm" onClick={() => setFieldReview('approved')} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="content-calendar-field-approve">
+                        <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setFieldPopupShowReject(v => !v)} className="text-red-500 border-red-500/40 hover:bg-red-500/10" data-testid="content-calendar-field-reject">
+                        <Ban className="h-3.5 w-3.5 mr-1" /> Reject
+                      </Button>
+                    </div>
+                    {showReject && (
+                      <div className="mt-2">
+                        <Label className={textPrimary}>Reject Reason</Label>
+                        <Textarea
+                          value={fieldPopupRejectReason}
+                          onChange={(e) => setFieldPopupRejectReason(e.target.value)}
+                          placeholder="Why is this rejected?"
+                          className={`text-xs ${bgSecondary} border ${borderColor} ${textPrimary} min-h-[60px]`}
+                          data-testid="content-calendar-field-reject-reason"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            if (!fieldPopupRejectReason.trim()) { toast.error('Reason is required'); return; }
+                            setFieldReview('rejected', fieldPopupRejectReason.trim());
+                          }}
+                          disabled={saving}
+                          className="mt-2 bg-red-600 hover:bg-red-700 text-white"
+                          data-testid="content-calendar-field-reject-confirm"
+                        >
+                          Confirm Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
+                <Button type="button" variant="outline" onClick={closeFieldPopup} disabled={saving}>Cancel</Button>
+                <Button type="button" onClick={saveFieldPopupValue} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-field-popup-save">
+                  {saving ? 'Saving…' : fieldPopup.isNewRow ? 'Add Post' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Description / Hashtags / Keywords popup */}
+      {descPopupRowId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeDescPopup}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
+            <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}><Hash className="h-4 w-4" /> Description &amp; Hashtags</h3>
+              <button onClick={closeDescPopup} className={textSecondary}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <Label className={textPrimary}>Description</Label>
+                <Textarea
+                  value={descPopupValue.description}
+                  onChange={(e) => setDescPopupValue(v => ({ ...v, description: e.target.value }))}
+                  className={`text-xs ${bgSecondary} border ${borderColor} ${textPrimary} min-h-[80px]`}
+                  data-testid="content-calendar-desc-input"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Hashtags</Label>
+                <Input
+                  value={descPopupValue.hashtags}
+                  onChange={(e) => setDescPopupValue(v => ({ ...v, hashtags: e.target.value }))}
+                  placeholder="#drawlead #marketing"
+                  className={inputCls}
+                  data-testid="content-calendar-hashtags-input"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Keywords</Label>
+                <Input
+                  value={descPopupValue.keywords}
+                  onChange={(e) => setDescPopupValue(v => ({ ...v, keywords: e.target.value }))}
+                  placeholder="keyword1, keyword2"
+                  className={inputCls}
+                  data-testid="content-calendar-keywords-input"
+                />
+              </div>
+            </div>
+            <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
+              <Button type="button" variant="outline" onClick={closeDescPopup} disabled={saving}>Cancel</Button>
+              <Button type="button" onClick={saveDescPopup} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-desc-save">
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status popup — Schedule (auto-stamps who) / Posted (needs the live
+          link) / a read-only view of both once posted. */}
+      {statusPopup && (() => {
+        const row = posts.find(p => p.id === statusPopup.rowId);
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeStatusPopup}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                  {statusPopup.mode === 'view' && <Eye className="h-4 w-4" />}
+                  {statusPopup.mode === 'schedule' ? 'Schedule Post' : statusPopup.mode === 'post' ? 'Mark as Posted' : 'Post Status'}
+                </h3>
+                <button onClick={closeStatusPopup} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-3">
+                {statusPopup.mode === 'schedule' && (
+                  <p className={`text-sm ${textSecondary}`}>
+                    Scheduling this post as <b className={textPrimary}>{currentUser?.name || 'you'}</b>.
+                  </p>
+                )}
+                {statusPopup.mode === 'post' && (
+                  <div>
+                    <Label className={textPrimary}>Post Link <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={statusPopupLink}
+                      onChange={(e) => setStatusPopupLink(e.target.value)}
+                      placeholder="https://linkedin.com/..."
+                      className={inputCls}
+                      data-testid="content-calendar-post-link-input"
+                    />
+                    <p className={`text-xs ${textSecondary} mt-1`}>Posted by <b className={textPrimary}>{currentUser?.name || 'you'}</b></p>
+                  </div>
+                )}
+                {statusPopup.mode === 'view' && (
+                  <>
+                    <p className={`text-sm ${textSecondary}`}>Scheduled by <b className={textPrimary}>{row?.scheduled_by_name || '—'}</b></p>
+                    <p className={`text-sm ${textSecondary}`}>Posted by <b className={textPrimary}>{row?.posted_by_name || '—'}</b></p>
+                    {row?.post_link ? (
+                      <a href={row.post_link} target="_blank" rel="noreferrer" className="text-sm text-[#6366f1] hover:underline break-all block">{row.post_link}</a>
+                    ) : (
+                      <p className={`text-sm ${textSecondary}`}>No post link yet</p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
+                <Button type="button" variant="outline" onClick={closeStatusPopup}>{statusPopup.mode === 'view' ? 'Close' : 'Cancel'}</Button>
+                {statusPopup.mode !== 'view' && (
+                  <Button type="button" onClick={confirmStatusTransition} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-status-confirm">
+                    {saving ? 'Saving…' : statusPopup.mode === 'schedule' ? 'Confirm Schedule' : 'Confirm Posted'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
