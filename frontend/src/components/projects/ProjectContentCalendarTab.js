@@ -42,7 +42,7 @@ const REVIEW_STATUS_STYLE = {
 };
 
 const STATUS_FLOW = ['created', 'scheduled', 'posted'];
-const STATUS_LABEL = { created: 'Created', scheduled: 'Scheduled', posted: 'Posted' };
+const STATUS_LABEL = { created: 'Created', scheduled: 'Scheduled', posted: 'Published' };
 const STATUS_STYLE = {
   created: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
   scheduled: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
@@ -120,7 +120,12 @@ export default function ProjectContentCalendarTab({
   const { user: currentUser } = useAuth();
 
   const [subTab, setSubTab] = useState('instagram');
-  const posts = project?.content_calendar || [];
+  // Rows saved from the quick popup before it set a singular `platform` only
+  // carried the bulk modal's `platforms` array — recover the platform from it
+  // so they still land under the right tab.
+  const posts = (project?.content_calendar || []).map(p => (
+    p.platform || !p.platforms?.length ? p : { ...p, platform: p.platforms[0] }
+  ));
 
   const now = new Date();
   const [activeMonth, setActiveMonth] = useState(now.getMonth());
@@ -190,12 +195,14 @@ export default function ProjectContentCalendarTab({
 
   // Description / Hashtags / Keywords popup.
   const [descPopupRowId, setDescPopupRowId] = useState(null);
+  const [descPopupNewDate, setDescPopupNewDate] = useState(null); // set when creating a new row from an empty day
   const [descPopupValue, setDescPopupValue] = useState({ description: '', hashtags: '', keywords: '' });
 
   // Status transition popup — Schedule auto-stamps who; Posted also needs
   // the live post link. Also doubles as a read-only "view" for an
   // already-posted row (who posted it, and the link).
-  const [statusPopup, setStatusPopup] = useState(null); // { rowId, mode: 'schedule' | 'post' | 'view' }
+  const [statusPopup, setStatusPopup] = useState(null); // { rowId, mode: 'choose' | 'view' }
+  const [statusChoice, setStatusChoice] = useState(''); // 'scheduled' | 'posted'
   const [statusPopupLink, setStatusPopupLink] = useState('');
 
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || '';
@@ -254,12 +261,30 @@ export default function ProjectContentCalendarTab({
     }
   };
 
-  const openDescPopup = (row) => {
-    setDescPopupRowId(row.id);
-    setDescPopupValue({ description: row.description || '', hashtags: row.hashtags || '', keywords: row.keywords || '' });
+  const openDescPopup = (row, newDateIso = null) => {
+    setDescPopupRowId(row ? row.id : null);
+    setDescPopupNewDate(row ? null : newDateIso);
+    setDescPopupValue({ description: row?.description || '', hashtags: row?.hashtags || '', keywords: row?.keywords || '' });
+    setFieldPopupPlatform(subTab !== 'all' ? subTab : '');
   };
-  const closeDescPopup = () => { setDescPopupRowId(null); setDescPopupValue({ description: '', hashtags: '', keywords: '' }); };
+  const closeDescPopup = () => {
+    setDescPopupRowId(null);
+    setDescPopupNewDate(null);
+    setDescPopupValue({ description: '', hashtags: '', keywords: '' });
+    setFieldPopupPlatform('');
+  };
   const saveDescPopup = async () => {
+    if (descPopupNewDate) {
+      if (!descPopupValue.description.trim() && !descPopupValue.hashtags.trim() && !descPopupValue.keywords.trim()) {
+        toast.error('Add a description, hashtags or keywords'); return;
+      }
+      if (!fieldPopupPlatform) { toast.error('Please select a platform'); return; }
+      setSaving(true);
+      const ok = await persist([...posts, { ...emptyDraftRow(subTab, descPopupNewDate), platform: fieldPopupPlatform, ...descPopupValue }]);
+      setSaving(false);
+      if (ok) { toast.success('Post added'); closeDescPopup(); }
+      return;
+    }
     setSaving(true);
     const next = posts.map(p => (p.id === descPopupRowId ? { ...p, ...descPopupValue } : p));
     const ok = await persist(next);
@@ -267,32 +292,30 @@ export default function ProjectContentCalendarTab({
     if (ok) { toast.success('Saved'); closeDescPopup(); }
   };
 
-  // Created -> Scheduled -> Posted. Scheduled auto-stamps the current user;
-  // Posted needs the actual post link, asked for in the popup. Clicking an
-  // already-posted pill re-opens the same popup read-only (mode 'view').
+  // A post is either Scheduled (auto-stamps the current user) or Published
+  // (asks for the live post link). Clicking an already-published pill
+  // re-opens the popup read-only (mode 'view').
   const openStatusPopup = (row) => {
-    if (row.status === 'created') {
-      setStatusPopup({ rowId: row.id, mode: 'schedule' });
-      setStatusPopupLink('');
-    } else if (row.status === 'scheduled') {
-      setStatusPopup({ rowId: row.id, mode: 'post' });
-      setStatusPopupLink(row.post_link || '');
-    } else {
+    if (row.status === 'posted') {
       setStatusPopup({ rowId: row.id, mode: 'view' });
-      setStatusPopupLink(row.post_link || '');
+    } else {
+      setStatusPopup({ rowId: row.id, mode: 'choose' });
     }
+    setStatusChoice(row.status === 'scheduled' ? 'scheduled' : '');
+    setStatusPopupLink(row.post_link || '');
   };
-  const closeStatusPopup = () => { setStatusPopup(null); setStatusPopupLink(''); };
+  const closeStatusPopup = () => { setStatusPopup(null); setStatusChoice(''); setStatusPopupLink(''); };
   const confirmStatusTransition = async () => {
-    if (statusPopup.mode === 'post' && !statusPopupLink.trim()) { toast.error('Post link is required'); return; }
+    if (!statusChoice) { toast.error('Choose Schedule or Published'); return; }
+    if (statusChoice === 'posted' && !statusPopupLink.trim()) { toast.error('Post link is required'); return; }
     setSaving(true);
-    const patch = statusPopup.mode === 'schedule'
+    const patch = statusChoice === 'scheduled'
       ? { status: 'scheduled', scheduled_by_name: currentUser?.name || '' }
       : { status: 'posted', posted_by_name: currentUser?.name || '', post_link: statusPopupLink.trim() };
     const next = posts.map(p => (p.id === statusPopup.rowId ? { ...p, ...patch } : p));
     const ok = await persist(next);
     setSaving(false);
-    if (ok) { toast.success(statusPopup.mode === 'schedule' ? 'Scheduled' : 'Marked as Posted'); closeStatusPopup(); }
+    if (ok) { toast.success(statusChoice === 'scheduled' ? 'Scheduled' : 'Marked as Published'); closeStatusPopup(); }
   };
 
   // LinkedIn "Publish Now" — first slice of the LinkedIn auto-scheduling
@@ -472,7 +495,6 @@ export default function ProjectContentCalendarTab({
   const startEdit = (row) => { setEditingId(row.id); setEditBuffer({ ...row }); };
   const cancelEdit = () => { setEditingId(null); setEditBuffer(null); };
   const saveEdit = async () => {
-    if (!editBuffer.post_title.trim()) { toast.error('Post Title is required'); return; }
     setSaving(true);
     try {
       const updated = { ...editBuffer };
@@ -598,7 +620,7 @@ export default function ProjectContentCalendarTab({
           { label: 'Total', value: summaryTotal, color: 'text-[#71717a]', accent: 'bg-[#71717a]/15' },
           { label: 'Created', value: summaryCreated, color: 'text-slate-400', accent: 'bg-slate-500/15' },
           { label: 'Scheduled', value: summaryScheduled, color: 'text-amber-500', accent: 'bg-amber-500/15' },
-          { label: 'Posted', value: summaryPosted, color: 'text-emerald-500', accent: 'bg-emerald-500/15' },
+          { label: 'Published', value: summaryPosted, color: 'text-emerald-500', accent: 'bg-emerald-500/15' },
         ].map(c => (
           <div key={c.label} className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`} data-testid={`content-calendar-summary-${c.label.toLowerCase()}`}>
             <p className={`text-xs ${textSecondary}`}>{c.label}</p>
@@ -876,20 +898,28 @@ export default function ProjectContentCalendarTab({
                           {subTab === 'all' && <td className="p-3" />}
                           <td className="p-3"><span className={`text-sm ${textPrimary}`}>{formatDayLabel(day)}</span></td>
                           <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(iso)}</td>
-                          <td colSpan={8} className="p-3">
-                            {canEdit ? (
-                              <button
-                                type="button"
-                                onClick={() => openFieldPopup(null, 'post_title', true, iso)}
-                                className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
-                                data-testid={`content-calendar-add-for-day-${iso}`}
-                              >
-                                <Plus className="h-3.5 w-3.5" /> Add Post
-                              </button>
-                            ) : (
-                              <span className={`text-xs ${textSecondary}`}>No post</span>
-                            )}
-                          </td>
+                          {[
+                            { field: 'post_title', label: 'Add Post' },
+                            { field: 'content_link', label: 'Add Content Link' },
+                            { field: 'creative_link', label: 'Add Creative Link' },
+                            { field: 'description', label: 'Add' },
+                          ].map(({ field, label }) => (
+                            <td key={field} className="p-3">
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => (field === 'description' ? openDescPopup(null, iso) : openFieldPopup(null, field, true, iso))}
+                                  className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
+                                  data-testid={field === 'post_title' ? `content-calendar-add-for-day-${iso}` : `content-calendar-add-${field}-for-day-${iso}`}
+                                >
+                                  <Plus className="h-3.5 w-3.5" /> {label}
+                                </button>
+                              ) : (
+                                field === 'post_title' ? <span className={`text-xs ${textSecondary}`}>No post</span> : null
+                              )}
+                            </td>
+                          ))}
+                          <td colSpan={4} className="p-3" />
                         </tr>
                       );
                     } else {
@@ -1179,7 +1209,7 @@ export default function ProjectContentCalendarTab({
       })()}
 
       {/* Description / Hashtags / Keywords popup */}
-      {descPopupRowId && (
+      {(descPopupRowId || descPopupNewDate) && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeDescPopup}>
           <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
             <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
@@ -1187,6 +1217,20 @@ export default function ProjectContentCalendarTab({
               <button onClick={closeDescPopup} className={textSecondary}><X className="h-5 w-5" /></button>
             </div>
             <div className="p-4 space-y-3">
+              {descPopupNewDate && subTab === 'all' && (
+                <div>
+                  <Label className={textPrimary}>Platform <span className="text-red-500">*</span></Label>
+                  <Select value={fieldPopupPlatform || 'none'} onValueChange={(v) => setFieldPopupPlatform(v === 'none' ? '' : v)}>
+                    <SelectTrigger className={inputCls} data-testid="content-calendar-desc-popup-platform">
+                      <SelectValue placeholder="Select platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Select —</SelectItem>
+                      {PLATFORMS.filter(pl => pl.id !== 'all').map(pl => <SelectItem key={pl.id} value={pl.id}>{pl.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Label className={textPrimary}>Description</Label>
                 <Textarea
@@ -1227,43 +1271,66 @@ export default function ProjectContentCalendarTab({
         </div>
       )}
 
-      {/* Status popup — Schedule (auto-stamps who) / Posted (needs the live
-          link) / a read-only view of both once posted. */}
+      {/* Status popup — Schedule (auto-stamps who) or Published (asks for the
+          live post link); read-only view once published. */}
       {statusPopup && (() => {
         const row = posts.find(p => p.id === statusPopup.rowId);
+        const choiceBtn = (value, label) => (
+          <button
+            type="button"
+            onClick={() => setStatusChoice(value)}
+            className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              statusChoice === value
+                ? (value === 'scheduled' ? 'bg-amber-500/20 text-amber-500 border-amber-500/50' : 'bg-emerald-500/20 text-emerald-500 border-emerald-500/50')
+                : `${bgSecondary} ${textSecondary} ${borderColor} hover:opacity-80`
+            }`}
+            data-testid={`content-calendar-status-choice-${value}`}
+          >
+            {label}
+          </button>
+        );
         return (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeStatusPopup}>
             <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
               <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
                 <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
                   {statusPopup.mode === 'view' && <Eye className="h-4 w-4" />}
-                  {statusPopup.mode === 'schedule' ? 'Schedule Post' : statusPopup.mode === 'post' ? 'Mark as Posted' : 'Post Status'}
+                  Post Status
                 </h3>
                 <button onClick={closeStatusPopup} className={textSecondary}><X className="h-5 w-5" /></button>
               </div>
               <div className="p-4 space-y-3">
-                {statusPopup.mode === 'schedule' && (
-                  <p className={`text-sm ${textSecondary}`}>
-                    Scheduling this post as <b className={textPrimary}>{currentUser?.name || 'you'}</b>.
-                  </p>
-                )}
-                {statusPopup.mode === 'post' && (
-                  <div>
-                    <Label className={textPrimary}>Post Link <span className="text-red-500">*</span></Label>
-                    <Input
-                      value={statusPopupLink}
-                      onChange={(e) => setStatusPopupLink(e.target.value)}
-                      placeholder="https://linkedin.com/..."
-                      className={inputCls}
-                      data-testid="content-calendar-post-link-input"
-                    />
-                    <p className={`text-xs ${textSecondary} mt-1`}>Posted by <b className={textPrimary}>{currentUser?.name || 'you'}</b></p>
-                  </div>
+                {statusPopup.mode === 'choose' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      {choiceBtn('scheduled', 'Schedule')}
+                      {choiceBtn('posted', 'Published')}
+                    </div>
+                    {statusChoice === 'scheduled' && (
+                      <p className={`text-sm ${textSecondary}`}>
+                        Scheduling this post as <b className={textPrimary}>{currentUser?.name || 'you'}</b>.
+                      </p>
+                    )}
+                    {statusChoice === 'posted' && (
+                      <div>
+                        <Label className={textPrimary}>Post Link <span className="text-red-500">*</span></Label>
+                        <Input
+                          value={statusPopupLink}
+                          onChange={(e) => setStatusPopupLink(e.target.value)}
+                          placeholder="https://linkedin.com/..."
+                          className={inputCls}
+                          data-testid="content-calendar-post-link-input"
+                          autoFocus
+                        />
+                        <p className={`text-xs ${textSecondary} mt-1`}>Published by <b className={textPrimary}>{currentUser?.name || 'you'}</b></p>
+                      </div>
+                    )}
+                  </>
                 )}
                 {statusPopup.mode === 'view' && (
                   <>
                     <p className={`text-sm ${textSecondary}`}>Scheduled by <b className={textPrimary}>{row?.scheduled_by_name || '—'}</b></p>
-                    <p className={`text-sm ${textSecondary}`}>Posted by <b className={textPrimary}>{row?.posted_by_name || '—'}</b></p>
+                    <p className={`text-sm ${textSecondary}`}>Published by <b className={textPrimary}>{row?.posted_by_name || '—'}</b></p>
                     {row?.post_link ? (
                       <a href={row.post_link} target="_blank" rel="noreferrer" className="text-sm text-[#6366f1] hover:underline break-all block">{row.post_link}</a>
                     ) : (
@@ -1275,8 +1342,8 @@ export default function ProjectContentCalendarTab({
               <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
                 <Button type="button" variant="outline" onClick={closeStatusPopup}>{statusPopup.mode === 'view' ? 'Close' : 'Cancel'}</Button>
                 {statusPopup.mode !== 'view' && (
-                  <Button type="button" onClick={confirmStatusTransition} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-status-confirm">
-                    {saving ? 'Saving…' : statusPopup.mode === 'schedule' ? 'Confirm Schedule' : 'Confirm Posted'}
+                  <Button type="button" onClick={confirmStatusTransition} disabled={saving || !statusChoice} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-status-confirm">
+                    {saving ? 'Saving…' : statusChoice === 'posted' ? 'Confirm Published' : 'Confirm Schedule'}
                   </Button>
                 )}
               </div>
