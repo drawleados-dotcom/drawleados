@@ -47,7 +47,7 @@ export default function ProjectProfileTab({
   // Profile / Report is remembered per platform, so each platform keeps its
   // own selected view instead of all of them sharing one toggle.
   const [viewByPlatform, setViewByPlatform] = useState({});
-  const innerView = viewByPlatform[platformTab] || 'profile'; // 'profile' | 'report'
+  const innerView = viewByPlatform[platformTab] || 'report'; // 'report' | 'profile' — Report is the first (default) tab
   const setInnerView = (v) => setViewByPlatform(prev => ({ ...prev, [platformTab]: v }));
   const platformLabel = PLATFORMS.find(p => p.id === platformTab)?.label || platformTab;
 
@@ -185,7 +185,7 @@ export default function ProjectProfileTab({
 
       {/* Profile / Report inner view */}
       <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
-        {[{ id: 'profile', label: 'Profile' }, { id: 'report', label: 'Report' }].map(v => (
+        {[{ id: 'report', label: 'Report' }, { id: 'profile', label: 'Profile' }].map(v => (
           <button
             key={v.id}
             type="button"
