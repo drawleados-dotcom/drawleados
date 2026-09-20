@@ -196,23 +196,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, isHeadOfOperations]);
 
-  // Super Admin's My Tasks is scoped to Management only — force the
-  // department filter to 'management' whenever it drifts (right after
-  // login, or after visiting Assign to Team and switching back), so My
-  // Tasks only ever shows Management's own sub-department tabs, never the
-  // other department tabs. And the reverse: Assign to Team has no
-  // "Management" pill of its own (see groupedDepts below), so leaving My
-  // Tasks with 'management' still selected must not leak Management's
-  // sub-department row into Assign to Team — reset it back to 'all'.
+  // Previously this forced Super Admin's My Tasks to filters.department =
+  // 'management' — meant to keep Management's sub-department tabs from
+  // leaking into other views, but it also hid every one of the Super
+  // Admin's own tasks tagged with any OTHER department (HR, Sales, Meta
+  // Ads, ...) from their own My Tasks tab, since the department filter is
+  // an additional AND on top of taskPasses' assigned-to-me/created-by-me
+  // check. Removed per explicit request — Super Admin's My Tasks should
+  // show everything assigned to or created by them, same as everyone else.
+  // Still reset back to 'all' if 'management' is somehow left selected
+  // outside My Tasks (Assign to Team has no "Management" pill of its own —
+  // see groupedDepts below), so its sub-department row doesn't leak there.
   useEffect(() => {
     if (!user) return;
     const role = (user.role || '').toLowerCase();
     if (role !== 'super_admin') return;
-    if (mainTab === 'assigned_to_me') {
-      if (filters.department !== 'management') {
-        setFilters(prev => ({ ...prev, department: 'management', subDepartment: 'all' }));
-      }
-    } else if (filters.department === 'management') {
+    if (mainTab !== 'assigned_to_me' && filters.department === 'management') {
       setFilters(prev => ({ ...prev, department: 'all', subDepartment: 'all' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2375,47 +2374,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             );
           }
 
-          // Super Admin's My Tasks is scoped to Management only (the effect
-          // above pins filters.department to 'management' here) — skip the
-          // flat department row entirely and go straight to Management's
-          // own sub-department pills, rendered by the "Sub Department
-          // Sub-Tabs" block below.
-          if ((user?.role || '').toLowerCase() === 'super_admin') {
-            return (
-              <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
-                {/* Meetings sub-tab — distinct colored pill */}
-                <button
-                  onClick={() => setMeetingsSubActive(true)}
-                  data-testid="dept-subtab-meetings"
-                  className={`relative px-4 py-2 rounded-xl text-sm transition-all border-2 ${
-                    meetingsSubActive
-                      ? 'bg-[#ec4899] text-white border-transparent shadow-sm'
-                      : `${bgCard} text-[#ec4899] border-[#ec4899]/40 hover:bg-[#ec4899]/10`
-                  }`}
-                >
-                  <Video className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
-                  Meetings
-                  {meetingsCount > 0 && !meetingsSubActive && (
-                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ec4899] text-white text-[10px] font-bold px-1">
-                      {meetingsCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Create Task */}
-                <Button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4"
-                  data-testid="create-task-btn"
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Create Task
-                </Button>
-              </div>
-            );
-          }
-
-          // My Tasks (everyone else) — flat department pill row. Management
+          // My Tasks — flat department pill row, same for every role
+          // (including Super Admin, who previously had filters.department
+          // force-pinned to 'management' here, hiding this row entirely in
+          // favor of Management's sub-department pills — removed since it
+          // was also hiding their own tasks tagged with any other
+          // department; see the effect above). Management
           // sorts first so it stays a visible, easy-to-find tab instead of
           // trailing behind every other department (it's a custom dept doc,
           // so the backend always appends it after the built-in ones).
