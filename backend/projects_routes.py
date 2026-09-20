@@ -103,6 +103,14 @@ class ProjectTaskCreate(BaseModel):
     erp_page_id: Optional[str] = None
     erp_page_name: Optional[str] = None
     erp_task_type: Optional[str] = None  # New Module, New Feature, Correction
+    # Content Calendar deliverable tasks: which calendar entry + link column
+    # this task is for. The assignee submits that link from My Tasks (see
+    # our_tasks_routes calendar-submit), which fills it in on the entry.
+    content_calendar_entry_id: Optional[str] = None
+    content_calendar_field: Optional[str] = None  # content_link | creative_link | editing_link | thumbnail_link
+
+
+CALENDAR_LINK_FIELDS = {"content_link", "creative_link", "editing_link", "thumbnail_link"}
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
@@ -786,6 +794,10 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         raise HTTPException(status_code=400, detail="Task name is required")
     if not payload.assigned_to:
         raise HTTPException(status_code=400, detail="assigned_to is required")
+    if payload.content_calendar_field and payload.content_calendar_field not in CALENDAR_LINK_FIELDS:
+        raise HTTPException(status_code=400, detail="Invalid content calendar field")
+    if bool(payload.content_calendar_field) != bool(payload.content_calendar_entry_id):
+        raise HTTPException(status_code=400, detail="content_calendar_entry_id and content_calendar_field go together")
 
     now = datetime.now(timezone.utc).isoformat()
     task = {
@@ -811,6 +823,8 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         "erp_page_id": payload.erp_page_id,
         "erp_page_name": payload.erp_page_name,
         "erp_task_type": payload.erp_task_type,
+        "content_calendar_entry_id": payload.content_calendar_entry_id,
+        "content_calendar_field": payload.content_calendar_field,
         "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
         "created_at": now,
         "updated_at": now,

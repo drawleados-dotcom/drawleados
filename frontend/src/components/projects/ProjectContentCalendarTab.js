@@ -8,7 +8,7 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar, Linkedin, Send, Check, Ban, Eye, Hash } from 'lucide-react';
+import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar, Linkedin, Send, Check, Ban, Eye, Hash, User, UserPlus, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -37,6 +37,9 @@ const REVIEW_FIELDS = {
   editing_link: { label: 'Editing', kind: 'url', placeholder: 'https://...' },
   thumbnail_link: { label: 'Thumbnail', kind: 'url', placeholder: 'https://...' },
 };
+// The four deliverable columns: each can be filled with a link directly, or
+// assigned to someone (a linked task they complete by submitting the link).
+const LINK_FIELDS = ['content_link', 'creative_link', 'editing_link', 'thumbnail_link'];
 const REVIEW_STATUS_STYLE = {
   pending: 'text-slate-400',
   approved: 'text-emerald-500',
@@ -404,16 +407,64 @@ export default function ProjectContentCalendarTab({
   // Creates a real Operations task (Department = Social Media) for one of
   // the 3 assignable fields, returning its task_id so it can be linked back
   // onto the calendar post entry.
-  const createFieldTask = async ({ field, assignee, date, postTitle }) => {
+  const createFieldTask = async ({ field, assignee, date, postTitle, entryId, description }) => {
     const cfg = FIELD_TASK_CONFIG[field];
+    // Link tasks carry which calendar entry + column they're for, so the
+    // assignee's My Tasks can show the post's details and take the link.
+    const linked = LINK_FIELDS.includes(field) && entryId;
     const res = await axios.post(`${API}/api/projects/${project.project_id}/tasks`, {
       task_name: `${cfg.label}: ${postTitle || 'Untitled Post'}`,
       assigned_to: assignee,
       due_date: date,
       department: 'social_media',
       category: cfg.category,
+      ...(description ? { description } : {}),
+      ...(linked ? { content_calendar_entry_id: entryId, content_calendar_field: field } : {}),
     }, { headers });
     return res.data?.task_id || null;
+  };
+
+  // Assign popup for one of the four link columns.
+  const [assignPopup, setAssignPopup] = useState(null); // { rowId, field }
+  const [assignUser, setAssignUser] = useState('');
+  const [assignDue, setAssignDue] = useState('');
+  const openAssignPopup = (row, field) => {
+    setAssignPopup({ rowId: row.id, field });
+    setAssignUser('');
+    setAssignDue(row[`${field}_date`] || row.post_date || '');
+  };
+  const closeAssignPopup = () => { setAssignPopup(null); setAssignUser(''); setAssignDue(''); };
+  const confirmAssign = async () => {
+    const row = posts.find(p => p.id === assignPopup.rowId);
+    const field = assignPopup.field;
+    if (!row) return;
+    if (!assignUser) { toast.error('Select who to assign this to'); return; }
+    if (!assignDue) { toast.error('Due date is required'); return; }
+    setSaving(true);
+    try {
+      const platformLabel = PLATFORMS.find(pl => pl.id === row.platform)?.label || row.platform || '';
+      const taskId = await createFieldTask({
+        field, assignee: assignUser, date: assignDue, postTitle: row.post_title, entryId: row.id,
+        description: `Post: ${row.post_title || 'Untitled'}${platformLabel ? ` · ${platformLabel}` : ''}${row.post_date ? ` · ${row.post_date}` : ''}`,
+      });
+      const next = posts.map(p => (p.id === row.id ? {
+        ...p,
+        [`${field}_assignee`]: assignUser,
+        [`${field}_date`]: assignDue,
+        [`${field}_task_id`]: taskId,
+        [`${field}_task_status`]: 'assigned',
+      } : p));
+      const ok = await persist(next);
+      if (ok) {
+        toast.success(`Assigned to ${assigneeName(assignUser) || 'user'} — it's in their My Tasks`);
+        onTaskCreated?.();
+        closeAssignPopup();
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to assign');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Default new posts to the month currently being viewed, so a post added
@@ -457,17 +508,23 @@ export default function ProjectContentCalendarTab({
       const newEntries = [];
       for (const row of draftRows) {
         const taskIds = {};
+        const entryIds = row.platforms.map(() => newRowId());
+        // One task can only link back to one entry, so only a single-
+        // platform post gets link-back tasks (multi-platform ones behave as
+        // plain tasks, like before).
+        const linkEntryId = row.platforms.length === 1 ? entryIds[0] : null;
         for (const field of Object.keys(FIELD_TASK_CONFIG)) {
           const assignee = row[`${field}_assignee`];
           const date = row[`${field}_date`];
           if (assignee && date) {
-            taskIds[field] = await createFieldTask({ field, assignee, date, postTitle: row.post_title });
+            taskIds[field] = await createFieldTask({ field, assignee, date, postTitle: row.post_title, entryId: linkEntryId });
           }
         }
-        for (const platform of row.platforms) {
+        for (const [platformIdx, platform] of row.platforms.entries()) {
           newEntries.push({
-            id: newRowId(),
+            id: entryIds[platformIdx],
             platform,
+            ...Object.fromEntries(LINK_FIELDS.map(f => [`${f}_task_status`, taskIds[f] && linkEntryId ? 'assigned' : ''])),
             post_date: row.post_date,
             post_title: row.post_title,
             content_link: row.content_link,
@@ -537,7 +594,8 @@ export default function ProjectContentCalendarTab({
         const assignee = updated[`${field}_assignee`];
         const date = updated[`${field}_date`];
         if (assignee && date && !updated[`${field}_task_id`]) {
-          updated[`${field}_task_id`] = await createFieldTask({ field, assignee, date, postTitle: updated.post_title });
+          updated[`${field}_task_id`] = await createFieldTask({ field, assignee, date, postTitle: updated.post_title, entryId: updated.id });
+          if (LINK_FIELDS.includes(field)) updated[`${field}_task_status`] = 'assigned';
         }
       }
       const next = posts.map(p => (p.id === updated.id ? updated : p));
@@ -759,6 +817,76 @@ export default function ProjectContentCalendarTab({
                     );
                   };
 
+                  // Content / Creative / Editing / Thumbnail: "+ Link" adds the
+                  // link directly, the user icon assigns it to someone (a task
+                  // they finish by submitting the link) — plus its status.
+                  const renderLinkCell = (row, field) => {
+                    const cfg = REVIEW_FIELDS[field];
+                    const value = row[field];
+                    const reviewStatus = row[`${field}_status`] || 'pending';
+                    const assigneeId = row[`${field}_assignee`];
+                    const hasTask = !!row[`${field}_task_id`] && !!assigneeId;
+                    const taskDone = row[`${field}_task_status`] === 'completed';
+                    const name = assigneeName(assigneeId);
+                    return (
+                      <div data-testid={`content-calendar-link-cell-${field}-${row.id}`}>
+                        <div className="flex items-center gap-2">
+                          {value ? (
+                            <>
+                              <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline">
+                                Open <ExternalLink className="h-3 w-3" />
+                              </a>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => openFieldPopup(row, field)}
+                                  className={`p-1 ${textSecondary} hover:opacity-80`}
+                                  title="Edit / approve / reject"
+                                  data-testid={`content-calendar-open-${field}-${row.id}`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </>
+                          ) : canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => openFieldPopup(row, field)}
+                              className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
+                              title={`Add the ${cfg.label} link directly`}
+                              data-testid={`content-calendar-open-${field}-${row.id}`}
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Link
+                            </button>
+                          ) : (
+                            <span className={`text-xs ${textSecondary}`}>—</span>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openAssignPopup(row, field)}
+                              className={`p-1 rounded-md hover:bg-black/5 ${hasTask ? (taskDone ? 'text-emerald-500' : 'text-amber-500') : 'text-[#6366f1]'}`}
+                              title={hasTask ? `${cfg.label} assigned to ${name || 'someone'}` : `Assign ${cfg.label} to someone`}
+                              data-testid={`content-calendar-assign-${field}-${row.id}`}
+                            >
+                              {hasTask ? <User className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                            </button>
+                          )}
+                        </div>
+                        {hasTask && (
+                          <p className={`text-[10px] mt-0.5 font-medium ${taskDone ? 'text-emerald-500' : 'text-amber-500'}`}>
+                            {name || 'Assigned'} · {taskDone ? 'Submitted' : 'Assigned'}
+                          </p>
+                        )}
+                        {value && (
+                          <p className={`text-[10px] font-medium ${REVIEW_STATUS_STYLE[reviewStatus]}`}>
+                            {reviewStatus === 'approved' ? 'Approved' : reviewStatus === 'rejected' ? 'Rejected' : 'Pending review'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  };
+
                   const renderPostRow = (row, idx) => {
                   const isEditing = editingId === row.id;
                   const buf = isEditing ? editBuffer : row;
@@ -811,36 +939,20 @@ export default function ProjectContentCalendarTab({
                         )}
                       </td>
                       <td className="p-3">
-                        {renderReviewCell(row, 'content_link')}
-                        {isEditing ? (
-                          <AssigneeDateEditor field="content_link" value={buf} onChange={patchBuf} />
-                        ) : (
-                          <AssigneeDateSummary field="content_link" row={row} />
-                        )}
+                        {renderLinkCell(row, 'content_link')}
+                        {isEditing && <AssigneeDateEditor field="content_link" value={buf} onChange={patchBuf} />}
                       </td>
                       <td className="p-3">
-                        {renderReviewCell(row, 'creative_link')}
-                        {isEditing ? (
-                          <AssigneeDateEditor field="creative_link" value={buf} onChange={patchBuf} />
-                        ) : (
-                          <AssigneeDateSummary field="creative_link" row={row} />
-                        )}
+                        {renderLinkCell(row, 'creative_link')}
+                        {isEditing && <AssigneeDateEditor field="creative_link" value={buf} onChange={patchBuf} />}
                       </td>
                       <td className="p-3">
-                        {renderReviewCell(row, 'editing_link')}
-                        {isEditing ? (
-                          <AssigneeDateEditor field="editing_link" value={buf} onChange={patchBuf} />
-                        ) : (
-                          <AssigneeDateSummary field="editing_link" row={row} />
-                        )}
+                        {renderLinkCell(row, 'editing_link')}
+                        {isEditing && <AssigneeDateEditor field="editing_link" value={buf} onChange={patchBuf} />}
                       </td>
                       <td className="p-3">
-                        {renderReviewCell(row, 'thumbnail_link')}
-                        {isEditing ? (
-                          <AssigneeDateEditor field="thumbnail_link" value={buf} onChange={patchBuf} />
-                        ) : (
-                          <AssigneeDateSummary field="thumbnail_link" row={row} />
-                        )}
+                        {renderLinkCell(row, 'thumbnail_link')}
+                        {isEditing && <AssigneeDateEditor field="thumbnail_link" value={buf} onChange={patchBuf} />}
                       </td>
                       <td className="p-3 max-w-[280px]">
                         <button
@@ -1271,6 +1383,69 @@ export default function ProjectContentCalendarTab({
                 <Button type="button" variant="outline" onClick={closeFieldPopup} disabled={saving}>Cancel</Button>
                 <Button type="button" onClick={saveFieldPopupValue} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-field-popup-save">
                   {saving ? 'Saving…' : fieldPopup.isNewRow ? 'Add Post' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Assign popup — Content / Creative / Editing / Thumbnail. Shows the
+          post's context, then creates a linked task for the person: it shows
+          in this project's Tasks tab and their My Tasks (Social Media). */}
+      {assignPopup && (() => {
+        const row = posts.find(p => p.id === assignPopup.rowId);
+        if (!row) return null;
+        const field = assignPopup.field;
+        const cfg = REVIEW_FIELDS[field];
+        const otherLinks = LINK_FIELDS.filter(f => f !== field && row[f]);
+        const existingAssignee = row[`${field}_task_id`] ? assigneeName(row[`${field}_assignee`]) : '';
+        const platformLabel = PLATFORMS.find(pl => pl.id === row.platform)?.label || row.platform || '—';
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeAssignPopup}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}><UserPlus className="h-4 w-4" /> Assign {cfg.label}</h3>
+                <button onClick={closeAssignPopup} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className={`rounded-lg ${bgSecondary} p-3 space-y-1.5 text-sm`} data-testid="content-calendar-assign-context">
+                  <div className="flex justify-between gap-3"><span className={textSecondary}>Post Title</span><span className={`${textPrimary} text-right`}>{row.post_title || '—'}</span></div>
+                  <div className="flex justify-between gap-3"><span className={textSecondary}>Post Date</span><span className={textPrimary}>{row.post_date || '—'} · {dayOfWeek(row.post_date)}</span></div>
+                  <div className="flex justify-between gap-3"><span className={textSecondary}>Platform</span><span className={textPrimary}>{platformLabel}</span></div>
+                  {otherLinks.map(f => (
+                    <div key={f} className="flex justify-between gap-3">
+                      <span className={textSecondary}>{REVIEW_FIELDS[f].label}</span>
+                      <a href={row[f]} target="_blank" rel="noreferrer" className="text-[#6366f1] hover:underline inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3" /></a>
+                    </div>
+                  ))}
+                </div>
+                {existingAssignee && (
+                  <p className="text-xs text-amber-500">
+                    Already assigned to <b>{existingAssignee}</b>{row[`${field}_date`] ? ` (due ${row[`${field}_date`]})` : ''}. Assigning again creates a new task.
+                  </p>
+                )}
+                <div>
+                  <Label className={textPrimary}>Due Date <span className="text-red-500">*</span></Label>
+                  <Input type="date" value={assignDue} onChange={(e) => setAssignDue(e.target.value)} className={inputCls} data-testid="content-calendar-assign-due" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Assign To <span className="text-red-500">*</span></Label>
+                  <Select value={assignUser || 'none'} onValueChange={(v) => setAssignUser(v === 'none' ? '' : v)}>
+                    <SelectTrigger className={inputCls} data-testid="content-calendar-assign-user">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Select —</SelectItem>
+                      {(users || []).map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className={`flex items-center justify-end gap-2 p-4 border-t ${borderColor}`}>
+                <Button type="button" variant="outline" onClick={closeAssignPopup} disabled={saving}>Cancel</Button>
+                <Button type="button" onClick={confirmAssign} disabled={saving} className="bg-[#6366f1] hover:bg-[#5558dd] text-white" data-testid="content-calendar-assign-confirm">
+                  {saving ? 'Assigning…' : 'Assign'}
                 </Button>
               </div>
             </div>

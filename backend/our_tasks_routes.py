@@ -751,6 +751,108 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============== CONTENT CALENDAR DELIVERABLE TASKS ==============
+# A calendar cell (Content / Creative / Editing / Thumbnail link) can be
+# assigned to a person: that creates a normal project task tagged with the
+# calendar entry + column it's for. These two endpoints power the special
+# view of such a task in the assignee's My Tasks — the post's details, and a
+# way for ONLY the assignee to submit the deliverable link, which fills that
+# column on the calendar entry and completes the task.
+
+CALENDAR_LINK_FIELDS = {
+    "content_link": "Content Link",
+    "creative_link": "Creative Link",
+    "editing_link": "Editing",
+    "thumbnail_link": "Thumbnail",
+}
+
+
+class CalendarSubmitPayload(BaseModel):
+    link: str
+
+
+async def _calendar_task_and_entry(db, task_id: str):
+    task = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    entry_id = task.get("content_calendar_entry_id")
+    field = task.get("content_calendar_field")
+    if not entry_id or field not in CALENDAR_LINK_FIELDS:
+        raise HTTPException(status_code=400, detail="This task isn't linked to a Content Calendar post")
+    project = await db.projects.find_one(
+        {"project_id": task.get("project_id")}, {"_id": 0, "name": 1, "content_calendar": 1}
+    )
+    entry = next((e for e in ((project or {}).get("content_calendar") or []) if e.get("id") == entry_id), None)
+    return task, project, entry, field
+
+
+@our_tasks_router.get("/tasks/{task_id}/calendar-context")
+async def get_calendar_task_context(task_id: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    task, project, entry, field = await _calendar_task_and_entry(db, task_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
+    return {
+        "project_name": (project or {}).get("name"),
+        "field": field,
+        "field_label": CALENDAR_LINK_FIELDS[field],
+        "platform": entry.get("platform"),
+        "post_title": entry.get("post_title") or "",
+        "post_date": entry.get("post_date"),
+        "post_type": entry.get("post_type"),
+        "description": entry.get("description") or "",
+        "hashtags": entry.get("hashtags") or "",
+        "keywords": entry.get("keywords") or "",
+        "links": {f: (entry.get(f) or "") for f in CALENDAR_LINK_FIELDS},
+        "current_link": entry.get(field) or "",
+        "review_status": entry.get(f"{field}_status") or "pending",
+        "reject_reason": entry.get(f"{field}_reject_reason") or "",
+        # Done tasks are closed — unless the reviewer rejected the link, in
+        # which case the assignee resubmits a fixed one.
+        "can_submit": task.get("assigned_to") == user.user_id and (
+            task.get("status") != "completed" or (entry.get(f"{field}_status") == "rejected")
+        ),
+    }
+
+
+@our_tasks_router.post("/tasks/{task_id}/calendar-submit")
+async def submit_calendar_task_link(task_id: str, payload: CalendarSubmitPayload, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    task, project, entry, field = await _calendar_task_and_entry(db, task_id)
+
+    # Only the person it's assigned to adds the link and completes the task.
+    if task.get("assigned_to") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only the assignee can submit this link")
+    link = (payload.link or "").strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="Link is required")
+    if not entry:
+        raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
+
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.projects.update_one(
+        {"project_id": task.get("project_id"), "content_calendar.id": task["content_calendar_entry_id"]},
+        {"$set": {
+            f"content_calendar.$.{field}": link,
+            f"content_calendar.$.{field}_status": "pending",
+            f"content_calendar.$.{field}_reject_reason": "",
+            f"content_calendar.$.{field}_task_status": "completed",
+            f"content_calendar.$.{field}_submitted_by_name": user.name,
+            "updated_at": now,
+        }},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
+
+    await db.our_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {"status": "completed", "calendar_submitted_link": link, "reference_image": None, "updated_at": now}},
+    )
+    return await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+
+
 # Time tracking actions
 @our_tasks_router.post("/tasks/{task_id}/time")
 async def time_tracking_action(task_id: str, action_data: TimeTrackingAction, request: Request):

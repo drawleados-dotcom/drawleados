@@ -27,6 +27,7 @@ import MeetingsPanel from '../components/MeetingsPanel';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import OperationsSummaryCards from '../components/operations/OperationsSummaryCards';
 import OperationsTabsBar from '../components/operations/OperationsTabsBar';
+import CalendarTaskPanel from '../components/operations/CalendarTaskPanel';
 import { buildErpPrompt } from '../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
 
@@ -492,6 +493,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // leads (Assign to Team access) rather than the assignee's own My Tasks —
   // doesn't apply to the creator viewing their own created tasks.
   const isHiddenProjectTaskForAssignee = useCallback((task) => {
+    // Content Calendar deliverables exist to be done by their assignee.
+    if (task.content_calendar_field) return false;
     if (task.assigned_to !== user?.user_id || task.created_by === user?.user_id) return false;
     if (!task.project_id) return false;
     const creatorRole = (usersById[task.created_by]?.role || '').toLowerCase();
@@ -2727,6 +2730,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               </Badge>
                             );
                           })()}
+                          {task.content_calendar_field && (
+                            <Badge className="text-xs bg-[#ec4899]/20 text-[#ec4899]" data-testid={`calendar-task-badge-${task.task_id}`}>
+                              <CalendarDays className="h-3 w-3 mr-1" />Social Media · {({ content_link: 'Content Link', creative_link: 'Creative Link', editing_link: 'Editing', thumbnail_link: 'Thumbnail' })[task.content_calendar_field] || 'Link'}
+                            </Badge>
+                          )}
                           {task.project_name && (
                             <Badge className="text-xs bg-[#6366f1]/20 text-[#6366f1]" data-testid={`project-badge-${task.task_id}`}>
                               <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
@@ -2974,15 +2982,31 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             );
                           })()}
                           {mainTab === 'assigned_to_me' && task.status !== 'completed' && !isAwaitingOrApproved(task) && (
-                            <Button
-                              size="sm"
-                              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
-                              onClick={(e) => { e.stopPropagation(); setCompleteSummaryTask(task); }}
-                              data-testid={`complete-btn-${task.task_id}`}
-                              title="Review this task's time, then send it for approval"
-                            >
-                              <Check className="h-3 w-3 mr-1" /> Complete
-                            </Button>
+                            task.content_calendar_field ? (
+                              // Content Calendar deliverable — done by submitting
+                              // the link (assignee only), not the usual Complete.
+                              task.assigned_to === user?.user_id && (
+                                <Button
+                                  size="sm"
+                                  className="bg-[#ec4899] hover:bg-[#db2777] text-white h-8 px-3"
+                                  onClick={(e) => { e.stopPropagation(); setViewingTask(task); setShowTaskDetailModal(true); }}
+                                  data-testid={`submit-link-btn-${task.task_id}`}
+                                  title="Open the post details and submit the link"
+                                >
+                                  <Link className="h-3 w-3 mr-1" /> Submit Link
+                                </Button>
+                              )
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
+                                onClick={(e) => { e.stopPropagation(); setCompleteSummaryTask(task); }}
+                                data-testid={`complete-btn-${task.task_id}`}
+                                title="Review this task's time, then send it for approval"
+                              >
+                                <Check className="h-3 w-3 mr-1" /> Complete
+                              </Button>
+                            )
                           )}
                           {/* Approval state — read-only. Sending for approval now
                               happens through Complete → the time summary → Send to
@@ -3955,6 +3979,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
+                {viewingTask.content_calendar_field && (
+                  <CalendarTaskPanel
+                    task={viewingTask}
+                    headers={headers}
+                    onSubmitted={(updated) => { setViewingTask(prev => ({ ...prev, ...updated })); loadTasks(); }}
+                    textPrimary={textPrimary}
+                    textSecondary={textSecondary}
+                    bgSecondary={bgSecondary}
+                    borderColor={borderColor}
+                  />
+                )}
                 {/* Description */}
                 <div>
                   <h4 className={`text-sm font-medium ${textSecondary} mb-2 flex items-center gap-2`}>
