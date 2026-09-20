@@ -403,6 +403,11 @@ export default function ProjectContentCalendarTab({
         <p className={`text-xs ${textSecondary}`}>Plan and track social posts for this project.</p>
       </div>
 
+      {/* Sticky on scroll — month nav, platform sub-tabs, summary cards and
+          the Add Post action row all stay pinned while only the day rows
+          below scroll. Needs its own opaque background (matching the page,
+          not the card) so scrolled-under rows don't show through. */}
+      <div className={`sticky top-0 z-20 space-y-3 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
       {/* Month navigator */}
       <div className={`${bgCard} border ${borderColor} rounded-2xl p-4`}>
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -498,6 +503,7 @@ export default function ProjectContentCalendarTab({
             </Button>
           )}
         </div>
+      </div>
       </div>
 
       {/* Table */}
