@@ -2433,10 +2433,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       {sd.label}
                       {count > 0 && (
                         <span
-                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
+                          className={isActive ? 'text-white/80' : textSecondary}
                           data-testid={`dept-pending-${sd.id}`}
                         >
-                          {count}
+                          {' '}({count})
                         </span>
                       )}
                     </button>
