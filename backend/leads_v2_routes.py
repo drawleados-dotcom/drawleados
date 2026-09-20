@@ -1488,6 +1488,7 @@ async def get_team_members(request: Request):
     cursor = db.users.find(
         {
             "is_active": True,
+            "status": {"$ne": "inactive"},
             "$or": [
                 {"role": {"$in": ["super_admin", "admin"]}},
                 {"module_access": "leads"},

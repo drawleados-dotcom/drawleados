@@ -1326,9 +1326,12 @@ async def get_users(user: User = Depends(get_current_user)):
 
 @api_router.get("/users/basic")
 async def get_users_basic(user: User = Depends(get_current_user)):
-    """Get basic user info for task assignment - available to all authenticated users"""
+    """Get basic user info for task assignment - available to all authenticated users.
+    Excludes relieved/deactivated employees (status == 'inactive') as well as
+    is_active == False — some employees relieved before is_active was synced
+    to status only have the latter set, so both are checked."""
     users = await db.users.find(
-        {"is_active": True},
+        {"is_active": True, "status": {"$ne": "inactive"}},
         {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "designation": 1}
     ).to_list(1000)
     return users

@@ -1040,10 +1040,10 @@ async def get_users_for_assignment(request: Request):
     await get_current_user(request)
     
     users = await db.users.find(
-        {"is_active": True},
+        {"is_active": True, "status": {"$ne": "inactive"}},
         {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
     ).to_list(100)
-    
+
     return users
 
 # ============== GOOGLE DOCS/SHEETS INTEGRATION ==============

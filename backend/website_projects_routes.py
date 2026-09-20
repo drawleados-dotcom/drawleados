@@ -1635,9 +1635,14 @@ async def get_team_members(request: Request):
     """Get list of team members for assignee dropdowns"""
     user = await get_current_user(request)
     
-    # Get users who can work on projects
+    # Get users who can work on projects — excludes relieved/deactivated
+    # employees, who had no active filter here at all before.
     users = await db.users.find(
-        {"role": {"$in": ["admin", "super_admin", "project_manager", "employee"]}},
+        {
+            "role": {"$in": ["admin", "super_admin", "project_manager", "employee"]},
+            "is_active": {"$ne": False},
+            "status": {"$ne": "inactive"},
+        },
         {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "department": 1, "designation": 1}
     ).to_list(50)
     

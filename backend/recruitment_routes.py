@@ -344,6 +344,6 @@ async def get_team_members(request: Request):
     """Recruiter/assignee dropdown — any active user."""
     await get_current_user_from_request(request)
     users = await db.users.find(
-        {"is_active": {"$ne": False}}, {"_id": 0, "user_id": 1, "name": 1}
+        {"is_active": {"$ne": False}, "status": {"$ne": "inactive"}}, {"_id": 0, "user_id": 1, "name": 1}
     ).sort("name", 1).to_list(500)
     return users

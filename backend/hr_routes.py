@@ -4181,9 +4181,12 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     if new_status:
         if new_status == "inactive" and user_id == current_user.user_id:
             raise HTTPException(status_code=400, detail="Cannot set your own account inactive")
+        # is_active mirrors status — task-assignment pickers across the app
+        # (Our Tasks, Projects, Notion boards, Recruitment, Leads) filter on
+        # is_active, so it has to flip both ways, not just to inactive.
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {"status": new_status}}
+            {"$set": {"status": new_status, "is_active": new_status != "inactive"}}
         )
 
     # Update or create profile
@@ -4252,7 +4255,7 @@ async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, reques
 
     await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"status": "inactive"}},
+        {"$set": {"status": "inactive", "is_active": False}},
     )
     await db.employee_profiles.update_one(
         {"user_id": user_id},
@@ -4293,6 +4296,7 @@ async def delete_employee(user_id: str, request: Request):
         {"user_id": user_id},
         {"$set": {
             "status": "inactive",
+            "is_active": False,
             "deleted_at": datetime.now(timezone.utc),
             "deleted_by": current_user.user_id
         }}
