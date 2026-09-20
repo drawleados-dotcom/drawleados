@@ -182,6 +182,11 @@ export default function ProjectContentCalendarTab({
   const [fieldPopupValue, setFieldPopupValue] = useState('');
   const [fieldPopupRejectReason, setFieldPopupRejectReason] = useState('');
   const [fieldPopupShowReject, setFieldPopupShowReject] = useState(false);
+  // Only asked when creating a new row from the "All" tab, where there's no
+  // single active platform to default to (every existing row/entry carries
+  // one singular `platform`, not the multi-select `platforms` the bulk Add
+  // Post modal uses before exploding it into one entry per platform).
+  const [fieldPopupPlatform, setFieldPopupPlatform] = useState('');
 
   // Description / Hashtags / Keywords popup.
   const [descPopupRowId, setDescPopupRowId] = useState(null);
@@ -200,12 +205,14 @@ export default function ProjectContentCalendarTab({
     setFieldPopupValue(row ? (row[field] || '') : '');
     setFieldPopupRejectReason(row ? (row[`${field}_reject_reason`] || '') : '');
     setFieldPopupShowReject(false);
+    setFieldPopupPlatform(subTab !== 'all' ? subTab : '');
   };
   const closeFieldPopup = () => {
     setFieldPopup(null);
     setFieldPopupValue('');
     setFieldPopupRejectReason('');
     setFieldPopupShowReject(false);
+    setFieldPopupPlatform('');
   };
 
   // Just saves the text/link value, leaving review status untouched — for
@@ -214,7 +221,12 @@ export default function ProjectContentCalendarTab({
   const saveFieldPopupValue = async () => {
     if (fieldPopup.isNewRow) {
       if (!fieldPopupValue.trim()) { toast.error(`${REVIEW_FIELDS[fieldPopup.field].label} is required`); return; }
-      const newRow = { ...emptyDraftRow(subTab, fieldPopup.dateIso), [fieldPopup.field]: fieldPopupValue.trim() };
+      if (!fieldPopupPlatform) { toast.error('Please select a platform'); return; }
+      const newRow = {
+        ...emptyDraftRow(subTab, fieldPopup.dateIso),
+        platform: fieldPopupPlatform,
+        [fieldPopup.field]: fieldPopupValue.trim(),
+      };
       setSaving(true);
       const ok = await persist([...posts, newRow]);
       setSaving(false);
@@ -1089,6 +1101,20 @@ export default function ProjectContentCalendarTab({
                 <button onClick={closeFieldPopup} className={textSecondary}><X className="h-5 w-5" /></button>
               </div>
               <div className="p-4 space-y-3">
+                {fieldPopup.isNewRow && subTab === 'all' && (
+                  <div>
+                    <Label className={textPrimary}>Platform <span className="text-red-500">*</span></Label>
+                    <Select value={fieldPopupPlatform || 'none'} onValueChange={(v) => setFieldPopupPlatform(v === 'none' ? '' : v)}>
+                      <SelectTrigger className={inputCls} data-testid="content-calendar-field-popup-platform">
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Select —</SelectItem>
+                        {PLATFORMS.filter(p => p.id !== 'all').map(p => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className={textPrimary}>{cfg.label}</Label>
                   <Input
