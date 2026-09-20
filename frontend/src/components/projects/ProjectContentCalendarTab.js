@@ -119,7 +119,7 @@ export default function ProjectContentCalendarTab({
   const headers = { Authorization: `Bearer ${token}` };
   const { user: currentUser } = useAuth();
 
-  const [subTab, setSubTab] = useState('all');
+  const [subTab, setSubTab] = useState('instagram');
   const posts = project?.content_calendar || [];
 
   const now = new Date();

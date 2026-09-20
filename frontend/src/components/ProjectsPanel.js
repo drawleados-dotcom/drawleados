@@ -3760,10 +3760,11 @@ export default function ProjectsPanel({
                     className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors ${p.is_pinned ? 'bg-amber-500/5' : ''}`}
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
-                      // Website projects land on Pages, their own primary tab; everything
-                      // else — including ERP — lands on Tasks.
+                      // Website projects land on Pages, their own primary tab; Social
+                      // Media projects land on Content Calendar; everything else —
+                      // including ERP — lands on Tasks.
                       const deps = p.departments || [];
-                      setProjectInnerTab(deps.includes('website') ? 'pages' : 'tasks');
+                      setProjectInnerTab(deps.includes('website') ? 'pages' : deps.includes('social_media') ? 'content_calendar' : 'tasks');
                       setSelectedProject(p);
                       try {
                         const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
