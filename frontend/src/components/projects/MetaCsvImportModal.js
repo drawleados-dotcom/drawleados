@@ -12,11 +12,13 @@ const num = (n) => (n == null ? '—' : Number(n).toLocaleString('en-IN', { maxi
 const fmtDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
 
 /**
- * Import a Meta Ads Manager export (Campaign / Ad Set / Ad level) for one
- * reporting day. Only Ad-level files carry performance numbers into the
- * Reports system (they're the only level with an ad to attach a number to);
- * Campaign and Ad Set files just bulk-create/update the structure and, when
- * the file states one, a daily budget.
+ * Import a Meta Ads Manager export (Campaign / Ad Set / Ad level) — one or
+ * many reporting days at once (Meta's "Breakdown > Day" export gives one row
+ * per entity per day, so a month is just many single-day rows in one file).
+ * Only Ad-level files carry performance numbers into the Reports system
+ * (they're the only level with an ad to attach a number to); Campaign and Ad
+ * Set files just bulk-create/update the structure and, on each day the file
+ * states one, a daily budget.
  */
 export default function MetaCsvImportModal({
   project, allowedLevels, headers, onClose, onImported,
@@ -26,7 +28,7 @@ export default function MetaCsvImportModal({
   const [campaignId, setCampaignId] = useState('');
   const [adSetId, setAdSetId] = useState('');
   const [fileName, setFileName] = useState('');
-  const [parsed, setParsed] = useState(null); // { rows, date, dateError, skippedSummaryRows, levelMismatch }
+  const [parsed, setParsed] = useState(null); // { days: [{date, rows}], totalRows, dateError, skippedSummaryRows, levelMismatch }
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const fileRef = useRef(null);
@@ -56,16 +58,16 @@ export default function MetaCsvImportModal({
   const changeLevel = (v) => { setLevel(v); setCampaignId(''); setAdSetId(''); reset(); };
 
   const doImport = async () => {
-    if (!parsed || parsed.dateError || parsed.rows.length === 0) return;
+    if (!parsed || parsed.dateError || parsed.days.length === 0) return;
     setBusy(true);
     try {
       let res;
       if (level === 'campaign') {
-        res = await axios.post(`${API}/api/meta-import/${project.project_id}/campaigns`, { date: parsed.date, rows: parsed.rows }, { headers });
+        res = await axios.post(`${API}/api/meta-import/${project.project_id}/campaigns`, { days: parsed.days }, { headers });
       } else if (level === 'adset') {
-        res = await axios.post(`${API}/api/meta-import/${project.project_id}/ad-sets`, { date: parsed.date, campaign_id: campaignId, rows: parsed.rows }, { headers });
+        res = await axios.post(`${API}/api/meta-import/${project.project_id}/ad-sets`, { campaign_id: campaignId, days: parsed.days }, { headers });
       } else {
-        res = await axios.post(`${API}/api/meta-import/${project.project_id}/ads`, { date: parsed.date, campaign_id: campaignId, ad_set_id: adSetId, rows: parsed.rows }, { headers });
+        res = await axios.post(`${API}/api/meta-import/${project.project_id}/ads`, { campaign_id: campaignId, ad_set_id: adSetId, days: parsed.days }, { headers });
       }
       setResult(res.data);
       onImported?.();
@@ -77,9 +79,21 @@ export default function MetaCsvImportModal({
     }
   };
 
-  const preview = useMemo(() => (parsed?.rows || []).slice(0, 8), [parsed]);
+  // Flattened across days, for the small "here's what's in the file" preview table.
+  const preview = useMemo(() => {
+    const flat = [];
+    for (const d of parsed?.days || []) {
+      for (const r of d.rows) { flat.push({ ...r, date: d.date }); if (flat.length >= 8) return flat; }
+    }
+    return flat;
+  }, [parsed]);
   const inputCls = `w-full h-9 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 text-sm disabled:opacity-50`;
-  const canImport = parsed && !parsed.dateError && !parsed.levelMismatch && parsed.rows.length > 0 && parentReady;
+  const canImport = parsed && !parsed.dateError && !parsed.levelMismatch && parsed.days.length > 0 && parentReady;
+  const dateRangeText = (dates) => {
+    if (!dates || dates.length === 0) return '';
+    if (dates.length === 1) return fmtDate(dates[0]);
+    return `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])} (${dates.length} days)`;
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => !busy && onClose()} data-testid="meta-csv-import-modal">
@@ -87,7 +101,7 @@ export default function MetaCsvImportModal({
         <div className={`p-4 border-b ${borderColor} flex items-start justify-between gap-3`}>
           <div>
             <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}><Upload className="h-4 w-4 text-[#6366f1]" /> Import CSV</h3>
-            <p className={`text-xs ${textSecondary}`}>A Meta Ads Manager export for a single reporting day.</p>
+            <p className={`text-xs ${textSecondary}`}>A Meta Ads Manager export — one day, or many (use "Breakdown &gt; Day" for a whole month at once).</p>
           </div>
           <button type="button" onClick={onClose} className={textSecondary} disabled={busy}><X className="h-5 w-5" /></button>
         </div>
@@ -97,14 +111,29 @@ export default function MetaCsvImportModal({
             <div className="space-y-3" data-testid="meta-csv-import-result">
               <div className="flex items-center gap-2 text-emerald-500">
                 <CheckCircle2 className="h-5 w-5" />
-                <span className="text-sm font-semibold">Imported for {fmtDate(result.date)}</span>
+                <span className="text-sm font-semibold">Imported {result.dates?.length === 1 ? `for ${fmtDate(result.dates[0])}` : `— ${dateRangeText(result.dates)}`}</span>
               </div>
               <ul className={`text-sm ${textPrimary} space-y-1 list-disc pl-5`}>
                 {result.created?.length > 0 && <li>{result.created.length} new {LEVEL_LABEL[level].toLowerCase()}{result.created.length === 1 ? '' : 's'} created</li>}
                 {result.matched?.length > 0 && <li>{result.matched.length} matched an existing {LEVEL_LABEL[level].toLowerCase()}</li>}
                 {typeof result.budgets_set === 'number' && result.budgets_set > 0 && <li>{result.budgets_set} daily budget{result.budgets_set === 1 ? '' : 's'} set from the file</li>}
-                {typeof result.reported === 'number' && <li>{result.reported} ad{result.reported === 1 ? '' : 's'} reported for the day{result.reported === 0 ? ' (rows had no numbers to report)' : ''}</li>}
+                {Array.isArray(result.days) && (
+                  <li>
+                    {result.reported} ad-day{result.reported === 1 ? '' : 's'} reported across {result.days.length} day{result.days.length === 1 ? '' : 's'}
+                    {result.days.length === 0 ? ' (rows had no numbers to report)' : ''}
+                  </li>
+                )}
               </ul>
+              {Array.isArray(result.days) && result.days.length > 1 && (
+                <div className={`rounded-lg border ${borderColor} max-h-40 overflow-y-auto`} data-testid="meta-csv-import-result-days">
+                  {result.days.map((d) => (
+                    <div key={d.date} className={`flex items-center justify-between gap-3 px-3 py-1.5 text-xs border-b last:border-b-0 ${borderColor}`}>
+                      <span className={textPrimary}>{fmtDate(d.date)}</span>
+                      <span className={textSecondary}>{num(d.leads)} leads · {money(d.spend)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex justify-end">
                 <Button type="button" onClick={onClose} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="meta-csv-import-done">Done</Button>
               </div>
@@ -180,34 +209,47 @@ export default function MetaCsvImportModal({
                   {!parsed.levelMismatch && !parsed.dateError && (
                     <>
                       <p className={`text-sm ${textPrimary}`}>
-                        <span className="font-medium">{parsed.rows.length}</span> row{parsed.rows.length === 1 ? '' : 's'} for <span className="font-medium">{fmtDate(parsed.date)}</span>
+                        <span className="font-medium">{parsed.totalRows}</span> row{parsed.totalRows === 1 ? '' : 's'} across{' '}
+                        <span className="font-medium">{parsed.days.length}</span> reporting day{parsed.days.length === 1 ? '' : 's'}
+                        {parsed.days.length > 1 && <span className={textSecondary}> ({dateRangeText(parsed.days.map((d) => d.date))})</span>}
                         {parsed.skippedSummaryRows > 0 && <span className={textSecondary}> · {parsed.skippedSummaryRows} account-total row{parsed.skippedSummaryRows === 1 ? '' : 's'} skipped</span>}
                       </p>
+                      {parsed.days.length > 1 && (
+                        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto" data-testid="meta-csv-day-chips">
+                          {parsed.days.map((d) => (
+                            <span key={d.date} className={`text-[10px] px-1.5 py-0.5 rounded-full border ${borderColor} ${textSecondary}`}>
+                              {fmtDate(d.date).slice(0, 6)} · {d.rows.length}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead className={bgSecondary}>
                             <tr>
+                              {parsed.days.length > 1 && <th className={`text-left px-2 py-1 ${textSecondary}`}>Date</th>}
                               <th className={`text-left px-2 py-1 ${textSecondary}`}>Name</th>
                               <th className={`text-right px-2 py-1 ${textSecondary}`}>Leads</th>
                               <th className={`text-right px-2 py-1 ${textSecondary}`}>Spend</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {preview.map((r) => (
-                              <tr key={r.name} className={`border-t ${borderColor}`}>
-                                <td className={`px-2 py-1 ${textPrimary} truncate max-w-[280px]`}>{r.name}</td>
+                            {preview.map((r, i) => (
+                              <tr key={`${r.date}-${r.name}-${i}`} className={`border-t ${borderColor}`}>
+                                {parsed.days.length > 1 && <td className={`px-2 py-1 whitespace-nowrap ${textSecondary}`}>{r.date}</td>}
+                                <td className={`px-2 py-1 ${textPrimary} truncate max-w-[240px]`}>{r.name}</td>
                                 <td className={`px-2 py-1 text-right ${textPrimary}`}>{num(r.leads)}</td>
                                 <td className={`px-2 py-1 text-right ${textPrimary}`}>{money(r.spend)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {parsed.rows.length > preview.length && <p className={`text-[11px] mt-1 ${textSecondary}`}>+ {parsed.rows.length - preview.length} more</p>}
+                        {parsed.totalRows > preview.length && <p className={`text-[11px] mt-1 ${textSecondary}`}>+ {parsed.totalRows - preview.length} more</p>}
                       </div>
                       <p className={`text-[11px] ${textSecondary}`}>
                         {level === 'ad'
-                          ? 'A name that already exists in this ad set is matched and its numbers for the day are replaced; a new name creates the ad.'
-                          : `A name that already exists is matched (and its daily budget updated, if the file states one); a new name creates the ${LEVEL_LABEL[level].toLowerCase()}. This file's own spend/leads aren't stored — import the Ads-level file for that to count in Reports.`}
+                          ? 'A name that already exists in this ad set is matched (its numbers for each day in the file are replaced); a new name creates the ad.'
+                          : `A name that already exists is matched (and its daily budget updated on any day the file states one); a new name creates the ${LEVEL_LABEL[level].toLowerCase()}. This file's own spend/leads aren't stored — import the Ads-level file for that to count in Reports.`}
                       </p>
                     </>
                   )}
