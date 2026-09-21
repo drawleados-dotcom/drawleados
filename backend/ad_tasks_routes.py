@@ -228,7 +228,9 @@ async def get_ad_task_context(task_id: str, request: Request):
         "blocked_message": blocked_message(blockers) if blockers else "",
         "is_assignee": is_assignee,
         "task_status": task.get("status"),
-        "can_submit": is_assignee and not completed and not blockers,
+        # Content / Creative / Editing stay editable by the assignee after the
+        # task is done (fix a link, replace the upload); a published Ad Setup is final.
+        "can_submit": is_assignee and not blockers and (not completed or field != "setup"),
     }
 
 
@@ -251,10 +253,10 @@ async def submit_ad_task(task_id: str, payload: AdSubmitPayload, request: Reques
         raise HTTPException(status_code=404, detail="This ad was removed from the Ads tab")
     if task.get("assigned_to") != user.user_id:
         raise HTTPException(status_code=403, detail="Only the assignee can do this")
-    if task.get("status") == "completed":
-        raise HTTPException(status_code=400, detail="This task is already completed")
-
     field = task["ad_field"]
+    already_done = task.get("status") == "completed"
+    if already_done and field == "setup":
+        raise HTTPException(status_code=400, detail="This task is already completed")
     blockers = blockers_for(ad, field)
     if blockers:
         raise HTTPException(status_code=400, detail=blocked_message(blockers))
@@ -318,7 +320,9 @@ async def submit_ad_task(task_id: str, payload: AdSubmitPayload, request: Reques
         raise HTTPException(status_code=404, detail="This ad was removed from the Ads tab")
 
     task_set: Dict[str, Any] = {"updated_at": now_iso}
-    if complete:
+    if already_done:
+        pass  # an edit of a finished task's link / upload — leave its status and timer alone
+    elif complete:
         task_set.update({
             "status": "completed",
             "reference_image": None,

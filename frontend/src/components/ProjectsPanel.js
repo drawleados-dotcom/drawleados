@@ -2720,6 +2720,8 @@ export default function ProjectsPanel({
                       </Button>
                       {canManageProjects && canEditProjectTask(task) && (
                         <>
+                          {/* Meta Ads ad tasks are managed from the Ads tab — no generic edit. */}
+                          {!task.ad_field && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -2730,6 +2732,7 @@ export default function ProjectsPanel({
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"

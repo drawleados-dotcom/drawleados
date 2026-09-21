@@ -652,6 +652,17 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         if not (is_admin or is_creator or is_assignee):
             raise HTTPException(status_code=403, detail="Only the creator, the assignee, or an admin can edit this task.")
         
+        # Meta Ads ad tasks belong to their ad: the details are managed from the
+        # project's Ads tab, and the assignee only supplies their own inputs
+        # (link / upload via the ad panel) and runs the timer. Nobody edits the
+        # task's name, description, due date etc. here — only a status change,
+        # which is gated below.
+        if task.get("ad_field") and any(v is not None for k, v in task_data.dict().items() if k != "status"):
+            raise HTTPException(
+                status_code=403,
+                detail="Meta Ads tasks can't be edited here — add your link or upload from the task's Meta Ads panel. Their details are managed from the project's Ads tab.",
+            )
+
         # Meta Ads ad tasks: completing / starting is gated (see ad_tasks_routes).
         if task.get("ad_field") and task_data.status and task_data.status != task.get("status"):
             from ad_tasks_routes import guard_ad_task

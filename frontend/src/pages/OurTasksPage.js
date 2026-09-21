@@ -1372,6 +1372,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
   const openEditModal = (task) => {
+    // Meta Ads ad tasks aren't edited as a form: their inputs (content link,
+    // creative link / upload) live in the ad panel of the task view.
+    if (task.ad_field) {
+      setViewingTask(task);
+      setShowTaskDetailModal(true);
+      return;
+    }
     setFormData({
       task_name: task.task_name,
       description: task.description || '',
@@ -2974,7 +2981,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             const isAssignee = task.assigned_to === user?.user_id;
                             // Pencil-edit: full edit allowed for creator / super_admin only.
                             // Assignees who are NOT creators can only edit timing (separate Edit button in TIMER column).
-                            const canFullEdit = isSuperAdmin || isCreator;
+                            // Ad tasks: the assignee gets it too, to open their link / upload inputs.
+                            const canFullEdit = isSuperAdmin || isCreator || (!!task.ad_field && isAssignee);
                             // Delete: only super_admin OR the assignee can delete (per user requirement).
                             const canDelete = isSuperAdmin || isAssignee;
                             return (
@@ -2993,7 +3001,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                         ? (task.approval_request?.status === 'approved'
                                             ? 'Approved — this task can no longer be edited'
                                             : 'Sent for approval — editing is locked until it is reviewed')
-                                        : 'Edit task'}
+                                        : (task.ad_field ? 'Open the ad details — update your link / upload' : 'Edit task')}
                                     >
                                       <Edit2 className="h-4 w-4" />
                                     </Button>
@@ -4281,12 +4289,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   >
                     Close
                   </Button>
-                  <Button 
-                    onClick={() => { setShowTaskDetailModal(false); openEditModal(viewingTask); }} 
-                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]"
-                  >
-                    <Edit2 className="h-4 w-4 mr-2" /> Edit Task
-                  </Button>
+                  {!viewingTask.ad_field && (
+                    <Button 
+                      onClick={() => { setShowTaskDetailModal(false); openEditModal(viewingTask); }} 
+                      className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]"
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" /> Edit Task
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

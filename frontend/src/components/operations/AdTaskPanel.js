@@ -77,13 +77,13 @@ export default function AdTaskPanel({ task, headers, onSubmitted, textPrimary, t
 
   const submitContent = async () => {
     if (!link.trim()) { toast.error('Paste the content link first'); return; }
-    await submit({ link: link.trim() }, 'Content submitted — task completed');
+    await submit({ link: link.trim() }, completed ? 'Content link updated' : 'Content submitted — task completed');
   };
   const submitCreative = async () => {
     if (!link.trim() && !file) { toast.error('Upload the creative or add its link'); return; }
     await submit(
       { link: link.trim() || null, file },
-      `${ctx.field_label} submitted — task completed`,
+      completed ? `${ctx.field_label} updated` : `${ctx.field_label} submitted — task completed`,
     );
   };
 
@@ -166,18 +166,26 @@ export default function AdTaskPanel({ task, headers, onSubmitted, textPrimary, t
           {/* The assignee's action */}
           {ctx.can_submit && field === 'content' && (
             <div className={`border-t ${borderColor} pt-3 space-y-2`} data-testid="ad-content-form">
-              <p className={`text-sm font-medium ${textPrimary}`}>Content link</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{completed ? 'Content link — update' : 'Content link'}</p>
               <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" data-testid="ad-content-link-input" />
-              <p className={`text-xs ${textSecondary}`}>The task can't be completed without the content link.</p>
+              <p className={`text-xs ${textSecondary}`}>
+                {completed ? 'This task is completed — you can still correct the link.' : "The task can't be completed without the content link."}
+              </p>
               <Button type="button" onClick={submitContent} disabled={busy} className="bg-[#3b82f6] hover:bg-[#2563eb] text-white" data-testid="ad-content-submit">
-                {busy ? 'Submitting…' : 'Submit & Complete Task'}
+                {busy ? (completed ? 'Saving…' : 'Submitting…') : (completed ? 'Save changes' : 'Submit & Complete Task')}
               </Button>
             </div>
           )}
 
           {ctx.can_submit && (field === 'creative' || field === 'editing') && (
             <div className={`border-t ${borderColor} pt-3 space-y-2`} data-testid="ad-creative-form">
-              <p className={`text-sm font-medium ${textPrimary}`}>{ctx.field_label} — upload and link</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{ctx.field_label} — {completed ? 'update your upload or link' : 'upload and link'}</p>
+              {completed && ctx[`${field}_file`] && !file && (
+                <div data-testid="ad-current-upload">
+                  <p className={`text-xs ${textSecondary}`}>Current upload</p>
+                  {filePreview(ctx[`${field}_file`])}
+                </div>
+              )}
               <input
                 type="file"
                 accept={IMAGE_TYPES.join(',')}
@@ -187,9 +195,13 @@ export default function AdTaskPanel({ task, headers, onSubmitted, textPrimary, t
               />
               {file && filePreview(file)}
               <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Creative link (https://…)" data-testid="ad-creative-link-input" />
-              <p className={`text-xs ${textSecondary}`}>Upload an image (up to 5MB), add a link, or both. Share videos as a link.</p>
+              <p className={`text-xs ${textSecondary}`}>
+                {completed
+                  ? 'This task is completed — choose a new image to replace the upload and/or change the link. Videos go in as a link.'
+                  : 'Upload an image (up to 5MB), add a link, or both. Share videos as a link.'}
+              </p>
               <Button type="button" onClick={submitCreative} disabled={busy} className="bg-[#3b82f6] hover:bg-[#2563eb] text-white" data-testid="ad-creative-submit">
-                {busy ? 'Submitting…' : 'Submit & Complete Task'}
+                {busy ? (completed ? 'Saving…' : 'Submitting…') : (completed ? 'Save changes' : 'Submit & Complete Task')}
               </Button>
             </div>
           )}
