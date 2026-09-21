@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { CalendarDays, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, ExternalLink, CheckCircle2, Download } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -15,6 +15,12 @@ const LINK_LABELS = {
   editing_link: 'Editing',
   thumbnail_link: 'Thumbnail',
 };
+// Content is a link only (a doc / caption source); Creative, Editing and
+// Thumbnail also accept an uploaded image — same as a Meta Ads ad's
+// Creative/Editing step — so the file can be handed over directly.
+const FILE_FIELDS = new Set(['creative_link', 'editing_link', 'thumbnail_link']);
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // A Content Calendar task, shown in the task view with the post's details.
 // Only the assignee can act on it, and what they do here updates the post on
@@ -29,8 +35,9 @@ export default function CalendarTaskPanel({ task, headers, onSubmitted, textPrim
   const [refreshKey, setRefreshKey] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  // link
+  // link (+ file, for the fields that take one)
   const [link, setLink] = useState('');
+  const [file, setFile] = useState(null); // { name, content_type, data_url }
   // posting
   const [postMode, setPostMode] = useState(''); // '' | 'schedule' | 'post'
   const [schedDate, setSchedDate] = useState('');
@@ -77,6 +84,20 @@ export default function CalendarTaskPanel({ task, headers, onSubmitted, textPrim
     if (!link.trim()) { toast.error('Paste the link first'); return; }
     if (await call('calendar-submit', { link: link.trim() }, 'Link submitted — task completed')) setLink('');
   };
+  const submitFile = async () => {
+    if (!link.trim() && !file) { toast.error('Upload the file or add its link'); return; }
+    if (await call('calendar-submit', { link: link.trim() || null, file }, `${fieldLabel} submitted — task completed`)) setFile(null);
+  };
+  const pickFile = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!IMAGE_TYPES.includes(f.type)) { toast.error('Upload a PNG, JPG, GIF or WebP image — share videos as a link'); return; }
+    if (f.size > MAX_IMAGE_BYTES) { toast.error('Image is too large (max 5MB) — share it as a link instead'); return; }
+    const reader = new FileReader();
+    reader.onloadend = () => setFile({ name: f.name, content_type: f.type, data_url: reader.result });
+    reader.readAsDataURL(f);
+  };
 
   const confirmPosting = async () => {
     if (postMode === 'schedule') {
@@ -100,6 +121,7 @@ export default function CalendarTaskPanel({ task, headers, onSubmitted, textPrim
 
   const fieldLabel = ctx?.field_label || 'Content Calendar';
   const kind = ctx?.kind;
+  const takesFile = FILE_FIELDS.has(ctx?.field);
   const row = (label, value) => (
     <div className="flex justify-between gap-3 text-sm">
       <span className={textSecondary}>{label}</span>
@@ -108,6 +130,14 @@ export default function CalendarTaskPanel({ task, headers, onSubmitted, textPrim
   );
   const openLink = (href) => (
     <a href={href} target="_blank" rel="noreferrer" className="text-[#6366f1] hover:underline inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3" /></a>
+  );
+  const filePreview = (f) => (
+    <div className="mt-1">
+      <img src={f.data_url} alt={f.name || 'file'} className={`max-h-48 rounded-lg border ${borderColor}`} />
+      <a href={f.data_url} download={f.name || 'file'} className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1 mt-1">
+        <Download className="h-3 w-3" /> {f.name || 'Download'}
+      </a>
+    </div>
   );
   const stat = (label, value) => (
     <div className={`rounded-lg border ${borderColor} p-3 text-center`}>
@@ -151,27 +181,43 @@ export default function CalendarTaskPanel({ task, headers, onSubmitted, textPrim
             </div>
           )}
 
-          {/* ---- link tasks ---- */}
+          {/* ---- link tasks: Content is link-only; Creative/Editing/Thumbnail also take an upload ---- */}
           {kind === 'link' && (
             <>
-              {ctx.current_link && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="inline-flex items-center gap-1 text-emerald-500"><CheckCircle2 className="h-4 w-4" /> Submitted {fieldLabel}</span>
-                  {openLink(ctx.current_link)}
+              {(ctx.current_link || ctx.current_file) && (
+                <div className={takesFile ? `border-t ${borderColor} pt-2 space-y-2` : ''} data-testid="calendar-task-current">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="inline-flex items-center gap-1 text-emerald-500"><CheckCircle2 className="h-4 w-4" /> Submitted {fieldLabel}</span>
+                    {ctx.current_link && openLink(ctx.current_link)}
+                  </div>
+                  {ctx.current_file && filePreview(ctx.current_file)}
                 </div>
               )}
               {ctx.review_status === 'rejected' && (
-                <p className="text-sm text-red-500">Rejected{ctx.reject_reason ? `: ${ctx.reject_reason}` : ''} — submit a corrected link below.</p>
+                <p className="text-sm text-red-500">Rejected{ctx.reject_reason ? `: ${ctx.reject_reason}` : ''} — submit a corrected {takesFile ? 'file / link' : 'link'} below.</p>
               )}
-              {ctx.can_submit ? (
+              {ctx.can_submit && !takesFile && (
                 <div className="space-y-2">
                   <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder={`Paste the ${fieldLabel} link (https://...)`} data-testid="calendar-task-link-input" />
                   <Button type="button" onClick={submitLink} disabled={busy} className="bg-[#10b981] hover:bg-[#059669] text-white w-full" data-testid="calendar-task-submit">
                     {busy ? 'Submitting…' : 'Submit link & complete task'}
                   </Button>
                 </div>
-              ) : (
-                !ctx.current_link && <p className={`text-xs ${textSecondary}`}>Only the assignee can add the link and complete this task.</p>
+              )}
+              {ctx.can_submit && takesFile && (
+                <div className={`border-t ${borderColor} pt-3 space-y-2`} data-testid="calendar-task-file-form">
+                  <p className={`text-sm font-medium ${textPrimary}`}>{fieldLabel} — upload and link</p>
+                  <input type="file" accept={IMAGE_TYPES.join(',')} onChange={pickFile} className={`text-sm ${textSecondary}`} data-testid="calendar-task-file-input" />
+                  {file && filePreview(file)}
+                  <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder={`${fieldLabel} link (https://...)`} data-testid="calendar-task-link-input" />
+                  <p className={`text-xs ${textSecondary}`}>Upload an image (up to 5MB), add a link, or both. Share videos as a link.</p>
+                  <Button type="button" onClick={submitFile} disabled={busy} className="bg-[#10b981] hover:bg-[#059669] text-white w-full" data-testid="calendar-task-submit">
+                    {busy ? 'Submitting…' : ctx.current_link || ctx.current_file ? 'Save changes' : 'Submit & complete task'}
+                  </Button>
+                </div>
+              )}
+              {!ctx.can_submit && !ctx.current_link && !ctx.current_file && (
+                <p className={`text-xs ${textSecondary}`}>Only the assignee can add the {takesFile ? 'file / link' : 'link'} and complete this task.</p>
               )}
             </>
           )}

@@ -10,6 +10,7 @@ import uuid
 import asyncio
 
 from access import has_hr_access, has_operations_access
+from ad_tasks_routes import AdFilePayload, parse_image
 
 our_tasks_router = APIRouter(prefix="/our-tasks", tags=["Our Tasks"])
 
@@ -823,7 +824,8 @@ def _next_day(date_str: Optional[str]) -> str:
 
 
 class CalendarSubmitPayload(BaseModel):
-    link: str
+    link: Optional[str] = None
+    file: Optional[AdFilePayload] = None
 
 
 class CalendarPostingPayload(BaseModel):
@@ -838,6 +840,15 @@ class CalendarReportPayload(BaseModel):
     comments: int = Field(ge=0)
     shares: int = Field(ge=0)
     reach: int = Field(ge=0)
+
+
+async def _calendar_file_meta(db, file_id: Optional[str]) -> Optional[dict]:
+    if not file_id:
+        return None
+    doc = await db.calendar_creative_files.find_one({"file_id": file_id}, {"_id": 0})
+    if not doc:
+        return None
+    return {"file_id": doc["file_id"], "name": doc.get("filename"), "content_type": doc.get("content_type"), "data_url": doc.get("data_url")}
 
 
 async def _calendar_task_and_entry(db, task_id: str):
@@ -901,6 +912,7 @@ async def get_calendar_task_context(task_id: str, request: Request):
         "keywords": entry.get("keywords") or "",
         "links": {f: (entry.get(f) or "") for f in CALENDAR_LINK_FIELDS},
         "current_link": (entry.get(field) or "") if kind == "link" else "",
+        "current_file": (await _calendar_file_meta(db, entry.get(f"{field}_file_id"))) if kind == "link" and field != "content_link" else None,
         "review_status": (entry.get(f"{field}_status") or "pending") if kind == "link" else None,
         "reject_reason": (entry.get(f"{field}_reject_reason") or "") if kind == "link" else "",
         "entry_status": entry.get("status") or "created",
@@ -913,6 +925,12 @@ async def get_calendar_task_context(task_id: str, request: Request):
     }
 
 
+# Content is a link only (a doc / caption source, not a file); Creative,
+# Editing and Thumbnail also accept an uploaded image — same as a Meta Ads
+# ad's Creative/Editing step — so a designer can hand over the file directly.
+CALENDAR_FILE_FIELDS = {"creative_link", "editing_link", "thumbnail_link"}
+
+
 @our_tasks_router.post("/tasks/{task_id}/calendar-submit")
 async def submit_calendar_task_link(task_id: str, payload: CalendarSubmitPayload, request: Request):
     from server import get_current_user, db
@@ -921,25 +939,65 @@ async def submit_calendar_task_link(task_id: str, payload: CalendarSubmitPayload
     if field not in CALENDAR_LINK_FIELDS:
         raise HTTPException(status_code=400, detail="This task isn't a link task")
     _require_assignee(task, user)
-    link = (payload.link or "").strip()
-    if not link:
-        raise HTTPException(status_code=400, detail="Link is required")
     if not entry:
         raise HTTPException(status_code=404, detail="This post was removed from the Content Calendar")
 
-    await _set_entry(db, task, {
-        field: link,
+    link = (payload.link or "").strip()
+    patch: Dict[str, Any] = {}
+    now = datetime.now(timezone.utc).isoformat()
+
+    if field not in CALENDAR_FILE_FIELDS:
+        if not link:
+            raise HTTPException(status_code=400, detail="Link is required")
+        patch[field] = link
+    else:
+        if not link and not payload.file:
+            raise HTTPException(status_code=400, detail="Upload the file or add its link to complete this task")
+        if link:
+            patch[field] = link
+        if payload.file:
+            parse_image(payload.file)
+            file_id = f"ccf_{uuid.uuid4().hex[:12]}"
+            await db.calendar_creative_files.insert_one({
+                "file_id": file_id,
+                "project_id": task.get("project_id"),
+                "entry_id": task.get("content_calendar_entry_id"),
+                "field": field,
+                "filename": (payload.file.name or "file")[:200],
+                "content_type": payload.file.content_type.lower(),
+                "data_url": payload.file.data_url,
+                "uploaded_by": user.user_id,
+                "uploaded_by_name": user.name,
+                "uploaded_at": now,
+            })
+            old_id = entry.get(f"{field}_file_id")
+            if old_id:
+                await db.calendar_creative_files.delete_one({"file_id": old_id})
+            patch[f"{field}_file_id"] = file_id
+            patch[f"{field}_file_name"] = (payload.file.name or "file")[:200]
+
+    patch.update({
         f"{field}_status": "pending",
         f"{field}_reject_reason": "",
         f"{field}_task_status": "completed",
         f"{field}_submitted_by_name": user.name,
     })
-    now = datetime.now(timezone.utc).isoformat()
+    await _set_entry(db, task, patch)
     await db.our_tasks.update_one(
         {"task_id": task_id},
-        {"$set": {"status": "completed", "calendar_submitted_link": link, "reference_image": None, "updated_at": now}},
+        {"$set": {"status": "completed", "calendar_submitted_link": link or None, "reference_image": None, "updated_at": now}},
     )
     return await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+
+
+@our_tasks_router.get("/calendar-files/{file_id}")
+async def get_calendar_creative_file(file_id: str, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    doc = await db.calendar_creative_files.find_one({"file_id": file_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="File not found")
+    return doc
 
 
 @our_tasks_router.post("/tasks/{task_id}/calendar-posting")
