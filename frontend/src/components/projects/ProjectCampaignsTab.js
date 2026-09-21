@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
@@ -14,6 +14,14 @@ const newId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const sortHistory = (history) => [...(history || [])].sort((a, b) => a.from_date.localeCompare(b.from_date));
+
+// The budget entry in effect today (latest one that has already started).
+const currentEntryOf = (history) => {
+  const today = todayIST();
+  const started = sortHistory(history).filter(e => e.from_date <= today);
+  return started.length ? started[started.length - 1] : null;
+};
+const fmtLeads = (n) => (Number.isInteger(n) ? n : Number(n.toFixed(1))).toLocaleString('en-IN');
 
 const prevDay = (iso) => {
   const d = new Date(`${iso}T00:00:00`);
@@ -48,8 +56,7 @@ const MODAL_LABEL = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad', budget: '
 function BudgetCell({ history, canEdit, onSet, onRemove, textPrimary, textSecondary, testId }) {
   const sorted = sortHistory(history);
   const today = todayIST();
-  const inEffect = sorted.filter(e => e.from_date <= today);
-  const currentId = inEffect.length ? inEffect[inEffect.length - 1].id : null;
+  const currentId = currentEntryOf(history)?.id ?? null;
   return (
     <div className="space-y-1" data-testid={testId}>
       {sorted.length === 0 && <span className={`text-xs ${textSecondary}`}>No budget set</span>}
@@ -77,6 +84,54 @@ function BudgetCell({ history, canEdit, onSet, onRemove, textPrimary, textSecond
           <Plus className="h-3 w-3" /> Set budget
         </button>
       )}
+    </div>
+  );
+}
+
+// The "Budget History" tab of the budget popup: one row per budget period
+// (From, To, Budget) newest first. `leadsFor(from, to)` is only passed for
+// campaigns — leads come from the daily Meta reports, which are per campaign.
+function BudgetHistoryTable({ history, leadsFor, textPrimary, textSecondary, borderColor, bgSecondary }) {
+  const sorted = sortHistory(history);
+  if (sorted.length === 0) {
+    return <p className={`text-xs ${textSecondary} py-6 text-center`}>No budget history yet.</p>;
+  }
+  const today = todayIST();
+  const currentId = currentEntryOf(history)?.id ?? null;
+  const rows = sorted
+    .map((e, i) => ({ e, to: sorted[i + 1] ? prevDay(sorted[i + 1].from_date) : null }))
+    .reverse();
+  const th = `text-left px-3 py-2 text-[11px] font-medium ${textSecondary} uppercase`;
+  return (
+    <div className={`rounded-lg border ${borderColor} overflow-hidden`} data-testid="budget-history-table">
+      <table className="w-full">
+        <thead>
+          <tr className={`border-b ${borderColor} ${bgSecondary}`}>
+            <th className={th}>From</th>
+            <th className={th}>To</th>
+            <th className={th}>Budget</th>
+            {leadsFor && <th className={th}>Leads</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ e, to }) => {
+            const isCurrent = e.id === currentId;
+            const isUpcoming = e.from_date > today;
+            return (
+              <tr key={e.id} className={`border-b last:border-b-0 ${borderColor}`} data-testid={`budget-history-row-${e.id}`}>
+                <td className={`px-3 py-2 text-sm ${textPrimary}`}>{fmtDate(e.from_date)}</td>
+                <td className={`px-3 py-2 text-sm ${textPrimary}`}>{to ? fmtDate(to) : (isUpcoming ? '—' : 'Present')}</td>
+                <td className={`px-3 py-2 text-sm ${textPrimary}`}>
+                  {money(e.amount)}/day
+                  {isCurrent && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500">Current</span>}
+                  {isUpcoming && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">Upcoming</span>}
+                </td>
+                {leadsFor && <td className={`px-3 py-2 text-sm ${textPrimary}`}>{isUpcoming ? '—' : leadsFor(e.from_date, to)}</td>}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -109,6 +164,44 @@ export default function ProjectCampaignsTab({
 
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Daily Meta reports — only used to count leads per budget period in the
+  // Budget History tab, so they're fetched when that tab is opened.
+  const [reports, setReports] = useState(null); // null = not loaded / failed
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const projectId = project?.project_id;
+  const loadReports = useCallback(async () => {
+    setReportsLoading(true);
+    try {
+      const t = localStorage.getItem('session_token');
+      const res = await axios.get(`${API}/api/meta-reports/project/${projectId}`, { headers: { Authorization: `Bearer ${t}` } });
+      setReports(res.data || []);
+    } catch (e) {
+      setReports(null);
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [projectId]);
+  const campaignHistoryOpen = modal?.type === 'budget' && modal.tab === 'history' && modal.target === 'campaign';
+  useEffect(() => {
+    if (campaignHistoryOpen) loadReports();
+  }, [campaignHistoryOpen, loadReports]);
+
+  // Leads reported for one campaign between two dates (inclusive; `to` null =
+  // open-ended). Sums the daily reports' entries the same way the Reports tab does.
+  const leadsFor = (campaignId) => (from, to) => {
+    if (reportsLoading) return '…';
+    if (reports === null) return '—';
+    let total = 0;
+    reports.forEach((r) => {
+      const d = String(r.date || '').slice(0, 10);
+      if (d < from || (to && d > to)) return;
+      (r.entries || []).forEach((en) => {
+        if (en.campaign_id === campaignId) total += Number(en.total_leads) || 0;
+      });
+    });
+    return fmtLeads(total);
+  };
   const [expanded, setExpanded] = useState({});
   const toggle = (key) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -232,6 +325,24 @@ export default function ProjectCampaignsTab({
     'Budget entry removed',
   );
 
+  // Total of every campaign's daily budget in effect today.
+  const currentAmountOf = (history) => Number(currentEntryOf(history)?.amount) || 0;
+  const totalCurrentBudget = campaigns.reduce((sum, c) => sum + currentAmountOf(c.budget_history), 0);
+  const budgetedCampaigns = campaigns.filter(c => currentAmountOf(c.budget_history) > 0).length;
+
+  // What the budget popup is currently about (re-read from live data so the
+  // history tab reflects a save/removal immediately).
+  let budgetTarget = null;
+  if (modal?.type === 'budget') {
+    const bc = campaigns.find(x => x.id === modal.campaignId);
+    if (bc && modal.target === 'adset') {
+      const ba = (bc.ad_sets || []).find(x => x.id === modal.adSetId);
+      if (ba) budgetTarget = { name: ba.name, history: ba.budget_history };
+    } else if (bc) {
+      budgetTarget = { name: bc.name, history: bc.budget_history };
+    }
+  }
+
   const inputCls = `${bgSecondary} border ${borderColor} ${textPrimary}`;
   const iconBtn = `p-1 ${textSecondary} hover:opacity-80`;
   const th = `text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`;
@@ -328,7 +439,7 @@ export default function ProjectCampaignsTab({
                       <BudgetCell
                         history={a.budget_history}
                         canEdit={canEdit}
-                        onSet={() => open({ type: 'budget', target: 'adset', campaignId: c.id, adSetId: a.id, amount: '', from_date: todayIST() })}
+                        onSet={() => open({ type: 'budget', tab: 'setting', target: 'adset', campaignId: c.id, adSetId: a.id, amount: '', from_date: todayIST() })}
                         onRemove={(entryId) => removeAdSetBudget(c, a, entryId)}
                         textPrimary={textPrimary}
                         textSecondary={textSecondary}
@@ -425,7 +536,7 @@ export default function ProjectCampaignsTab({
                           <BudgetCell
                             history={c.budget_history}
                             canEdit={canEdit}
-                            onSet={() => open({ type: 'budget', target: 'campaign', campaignId: c.id, amount: '', from_date: todayIST() })}
+                            onSet={() => open({ type: 'budget', tab: 'setting', target: 'campaign', campaignId: c.id, amount: '', from_date: todayIST() })}
                             onRemove={(entryId) => removeCampaignBudget(c, entryId)}
                             textPrimary={textPrimary}
                             textSecondary={textSecondary}
@@ -464,6 +575,20 @@ export default function ProjectCampaignsTab({
                   </tr>
                 )}
               </tbody>
+              {isMeta && campaigns.length > 0 && (
+                <tfoot>
+                  <tr className={`border-t-2 ${borderColor} ${bgSecondary}`} data-testid="campaign-budget-total-row">
+                    <td colSpan={3} className={`p-3 text-right text-xs font-semibold uppercase ${textSecondary}`}>
+                      Total daily budget (current)
+                    </td>
+                    <td className="p-3">
+                      <span className={`text-sm font-semibold ${textPrimary}`} data-testid="campaign-budget-total">{money(totalCurrentBudget)}/day</span>
+                      <span className={`text-[11px] ${textSecondary} ml-2`}>{budgetedCampaigns} of {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'} with a budget</span>
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </CardContent>
@@ -471,19 +596,65 @@ export default function ProjectCampaignsTab({
 
       {modal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full ${modal.type === 'budget' ? 'max-w-lg' : 'max-w-sm'}`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
-              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-                <Megaphone className="h-4 w-4 text-[#6366f1]" />
-                {modal.type === 'budget'
-                  ? `Set ${modal.target === 'adset' ? 'Ad Set' : 'Campaign'} Daily Budget`
-                  : `${modal.mode === 'add' ? 'Add' : 'Edit'} ${MODAL_LABEL[modal.type]}`}
-              </h3>
+              <div>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <Megaphone className="h-4 w-4 text-[#6366f1]" />
+                  {modal.type === 'budget'
+                    ? `${modal.target === 'adset' ? 'Ad Set' : 'Campaign'} Daily Budget`
+                    : `${modal.mode === 'add' ? 'Add' : 'Edit'} ${MODAL_LABEL[modal.type]}`}
+                </h3>
+                {modal.type === 'budget' && budgetTarget?.name && (
+                  <p className={`text-xs ${textSecondary} mt-0.5`}>{budgetTarget.name}</p>
+                )}
+              </div>
               <button onClick={closeModal} className={textSecondary}>
                 <X className="h-5 w-5" />
               </button>
             </div>
+            {modal.type === 'budget' && (
+              <div className={`px-5 pt-4`}>
+                <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${borderColor}`}>
+                  {[{ id: 'setting', label: 'Budget Setting' }, { id: 'history', label: 'Budget History' }].map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setModal(m => ({ ...m, tab: t.id }))}
+                      data-testid={`budget-tab-${t.id}`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        modal.tab === t.id ? `${bgSecondary} ${textPrimary}` : `${textSecondary} hover:opacity-80`
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="p-5 space-y-3">
+              {modal.type === 'budget' && modal.tab === 'history' && (
+                <>
+                  <BudgetHistoryTable
+                    history={budgetTarget?.history}
+                    leadsFor={modal.target === 'campaign' ? leadsFor(modal.campaignId) : null}
+                    textPrimary={textPrimary}
+                    textSecondary={textSecondary}
+                    borderColor={borderColor}
+                    bgSecondary={bgSecondary}
+                  />
+                  {modal.target === 'adset' && (
+                    <p className={`text-[11px] ${textSecondary}`}>Leads are reported per campaign in the daily reports, so they aren't split by ad set.</p>
+                  )}
+                </>
+              )}
+              {modal.type === 'budget' && modal.tab !== 'history' && (
+                <p className={`text-xs ${textSecondary}`} data-testid="budget-current-line">
+                  {currentEntryOf(budgetTarget?.history)
+                    ? `Current: ${money(currentEntryOf(budgetTarget?.history).amount)}/day since ${fmtDate(currentEntryOf(budgetTarget?.history).from_date)}`
+                    : 'No budget in effect yet.'}
+                </p>
+              )}
               {modal.type !== 'budget' && (
                 <div>
                   <p className={`text-xs font-medium ${textSecondary} mb-1`}>{MODAL_LABEL[modal.type]} Name</p>
@@ -510,7 +681,7 @@ export default function ProjectCampaignsTab({
                   <p className={`text-[11px] ${textSecondary} mt-1`}>Separate multiple locations with commas.</p>
                 </div>
               )}
-              {(modal.type === 'budget' || (isMeta && modal.mode === 'add' && (modal.type === 'campaign' || modal.type === 'adset'))) && (
+              {((modal.type === 'budget' && modal.tab !== 'history') || (isMeta && modal.mode === 'add' && (modal.type === 'campaign' || modal.type === 'adset'))) && (
                 <>
                   <div>
                     <p className={`text-xs font-medium ${textSecondary} mb-1`}>
@@ -545,16 +716,22 @@ export default function ProjectCampaignsTab({
               )}
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
-              <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
-              <Button
-                type="button"
-                onClick={saveModal}
-                disabled={saving}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                data-testid="campaign-form-save"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
+              {modal.type === 'budget' && modal.tab === 'history' ? (
+                <Button type="button" variant="outline" onClick={closeModal}>Close</Button>
+              ) : (
+                <>
+                  <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
+                  <Button
+                    type="button"
+                    onClick={saveModal}
+                    disabled={saving}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="campaign-form-save"
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
