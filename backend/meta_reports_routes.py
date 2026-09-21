@@ -16,6 +16,8 @@ import math
 import re
 import uuid
 
+import meta_decision_engine as engine
+
 meta_reports_router = APIRouter(prefix="/meta-reports", tags=["meta-reports"])
 
 
@@ -461,6 +463,15 @@ class AdReportRow(BaseModel):
     ad_id: str
     leads: Optional[float] = None
     spend: Optional[float] = None
+    # Optional inputs the Decisions tab needs (CTR, CPC, frequency, lead quality).
+    reach: Optional[float] = None
+    impressions: Optional[float] = None
+    link_clicks: Optional[float] = None
+    qualified_leads: Optional[float] = None
+    appointments: Optional[float] = None
+
+
+DECISION_INPUTS = ("reach", "impressions", "link_clicks", "qualified_leads", "appointments")
 
 
 class DailySave(BaseModel):
@@ -491,7 +502,7 @@ def _ad_due_on(ad: dict, day: str) -> bool:
 async def _load_meta_project(user, db, project_id: str) -> dict:
     project = await db.projects.find_one(
         {"project_id": project_id, "departments": "meta", **(await _visible_projects_query(user, db))},
-        {"_id": 0, "project_id": 1, "name": 1, "status": 1, "campaigns": 1},
+        {"_id": 0, "project_id": 1, "name": 1, "status": 1, "campaigns": 1, "decision_settings": 1},
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -663,7 +674,9 @@ async def _complete_assigned_task(db, doc: dict) -> None:
 @meta_reports_router.put("/daily/{project_id}/{day}")
 async def save_daily_report(project_id: str, day: str, payload: DailySave, request: Request):
     """Save one ad set's numbers for the day (replaces what was saved for that
-    ad set). Blank rows are dropped, so clearing the fields un-reports the ad."""
+    ad set). Blank rows are dropped, so clearing the fields un-reports the ad.
+    Besides leads and spend, an ad can carry the optional inputs the Decisions
+    tab uses; a blank one is left out, never stored as 0."""
     from server import get_current_user, db
     user = await get_current_user(request)
     project = await _load_meta_project(user, db, project_id)
@@ -686,17 +699,27 @@ async def save_daily_report(project_id: str, day: str, payload: DailySave, reque
         if row.ad_id in seen:
             raise HTTPException(status_code=400, detail="An ad was sent twice")
         seen.add(row.ad_id)
-        if row.leads is None and row.spend is None:
+        extras = {k: getattr(row, k) for k in DECISION_INPUTS if getattr(row, k) is not None}
+        if row.leads is None and row.spend is None and not extras:
             continue
         leads, spend = row.leads if row.leads is not None else 0.0, row.spend if row.spend is not None else 0.0
         if not (math.isfinite(leads) and math.isfinite(spend)) or leads < 0 or spend < 0:
             raise HTTPException(status_code=400, detail="Leads and spend must be numbers of 0 or more")
+        if any(not math.isfinite(v) or v < 0 for v in extras.values()):
+            raise HTTPException(status_code=400, detail="Reach, impressions, link clicks, qualified leads and appointments must be numbers of 0 or more")
+        if "impressions" in extras and "link_clicks" in extras and extras["link_clicks"] > extras["impressions"]:
+            raise HTTPException(status_code=400, detail="Link clicks can't be more than impressions")
+        if "impressions" in extras and "reach" in extras and extras["reach"] > extras["impressions"]:
+            raise HTTPException(status_code=400, detail="Reach can't be more than impressions")
+        if "qualified_leads" in extras and extras["qualified_leads"] > leads:
+            raise HTTPException(status_code=400, detail="Qualified leads can't be more than leads")
         entries.append({
             "campaign_id": campaign["id"], "campaign_name": campaign.get("name") or "",
             "ad_set_id": ad_set["id"], "ad_set_name": ad_set.get("name") or "",
             "ad_id": row.ad_id, "ad_name": ads[row.ad_id].get("name") or "",
             "total_leads": round(leads, 2), "total_spend": round(spend, 2),
             "cost_per_lead": _cpl(spend, leads) or 0,
+            **{k: round(v, 2) for k, v in extras.items()},
         })
 
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -796,3 +819,153 @@ async def unassign_daily_report(project_id: str, day: str, request: Request):
     }})
     return await _day_detail(db, project, day)
 
+
+# ------------------------------------------------------------------ decisions
+# KEEP / SCALE / WATCH / OPTIMIZE / KILL for every ad, worked out from the
+# daily reports against the project's target CPL (rules: meta_decision_engine).
+
+class DecisionSettings(BaseModel):
+    target_cpl: float
+    min_qualified_pct: Optional[float] = None
+    window_days: Optional[int] = None
+
+
+def _decision_settings(project: dict) -> dict:
+    raw = project.get("decision_settings") or {}
+    target = raw.get("target_cpl")
+    return {
+        "target_cpl": float(target) if target else None,
+        "min_qualified_pct": float(raw.get("min_qualified_pct") if raw.get("min_qualified_pct") is not None else engine.DEFAULT_MIN_QUALIFIED_PCT),
+        "window_days": raw.get("window_days") if raw.get("window_days") in engine.WINDOWS else engine.DEFAULT_WINDOW,
+    }
+
+
+@meta_reports_router.put("/decisions/{project_id}/settings")
+async def save_decision_settings(project_id: str, payload: DecisionSettings, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    from projects_routes import _is_operation_head_or_admin
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can change the decision settings")
+    await _load_meta_project(user, db, project_id)
+    if not math.isfinite(payload.target_cpl) or payload.target_cpl <= 0:
+        raise HTTPException(status_code=400, detail="Target CPL must be more than 0")
+    pct = payload.min_qualified_pct
+    if pct is not None and (not math.isfinite(pct) or pct < 0 or pct > 100):
+        raise HTTPException(status_code=400, detail="Minimum qualified % must be between 0 and 100")
+    if payload.window_days is not None and payload.window_days not in engine.WINDOWS:
+        raise HTTPException(status_code=400, detail=f"Window must be one of {', '.join(map(str, engine.WINDOWS))} days")
+    settings = {
+        "target_cpl": round(payload.target_cpl, 2),
+        "min_qualified_pct": round(pct if pct is not None else engine.DEFAULT_MIN_QUALIFIED_PCT, 2),
+        "window_days": payload.window_days or engine.DEFAULT_WINDOW,
+        "updated_by": user.user_id, "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.projects.update_one({"project_id": project_id}, {"$set": {"decision_settings": settings}})
+    return _decision_settings({"decision_settings": settings})
+
+
+@meta_reports_router.get("/decisions/{project_id}")
+async def get_decisions(
+    project_id: str,
+    request: Request,
+    day: Optional[str] = Query(None),
+    window: Optional[int] = Query(None),
+):
+    """The day's calls for every ad, ad set and campaign of the project."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    from projects_routes import _is_operation_head_or_admin
+    project = await _load_meta_project(user, db, project_id)
+    today = _today_ist()
+    day = _clean_date(day, "day") or today
+    if day > today:
+        raise HTTPException(status_code=400, detail="Decisions can't be made for a future day")
+    settings = _decision_settings(project)
+    n = window if window is not None else settings["window_days"]
+    if n not in engine.WINDOWS:
+        raise HTTPException(status_code=400, detail=f"window must be one of {', '.join(map(str, engine.WINDOWS))}")
+    target = settings["target_cpl"]
+    bounds = engine.window_bounds(day, n)
+
+    docs = await db.meta_ads_reports.find({"project_id": project_id, "kind": DAILY}, {"_id": 0, "date": 1, "entries": 1}).to_list(20000)
+    by_ad: dict = {}
+    data_through = None
+    for d in docs:
+        d_day = (d.get("date") or "")[:10]
+        if not d_day or d_day > day or not d.get("entries"):
+            continue
+        data_through = max(data_through or d_day, d_day)
+        for e in d["entries"]:
+            if e.get("ad_id"):
+                by_ad.setdefault(e["ad_id"], []).append({**e, "date": d_day})
+
+    def within(rows, start, end):
+        return [r for r in rows if start <= r["date"] <= end]
+
+    def group(rows):
+        agg = engine.aggregate(rows)
+        return {"metrics": agg, **(engine.judge_group(agg, target) if target else {"health": engine.NO_TARGET, "note": ""})}
+
+    counts = {k: 0 for k in (engine.SCALE, engine.KEEP, engine.WATCH, engine.OPTIMIZE, engine.KILL, engine.NO_DATA, engine.INACTIVE)}
+    counts["replace"] = 0
+    actions, all_cur, campaigns = [], [], []
+    for c in project.get("campaigns") or []:
+        camp_cur, ad_sets = [], []
+        for a in c.get("ad_sets") or []:
+            set_cur, ads_out = [], []
+            for ad in a.get("ads") or []:
+                if not ad.get("id") or not _ad_due_on(ad, day):
+                    continue
+                rows = by_ad.get(ad["id"], [])
+                cur = within(rows, bounds["cur_from"], bounds["cur_to"])
+                prev = within(rows, bounds["prev_from"], bounds["prev_to"])
+                spend_days = sorted(r["date"] for r in rows if _num(r.get("total_spend")) > 0)
+                first_spend, last_spend = (spend_days[0], spend_days[-1]) if spend_days else (None, None)
+                age = (date.fromisoformat(day) - date.fromisoformat(first_spend)).days if first_spend else None
+                cur_agg = engine.aggregate(cur)
+                stale = bool(last_spend and data_through and (date.fromisoformat(data_through) - date.fromisoformat(last_spend)).days >= engine.INACTIVE_AFTER_DAYS)
+                if not target:
+                    call = {"status": engine.NO_TARGET, "level": None, "reason": "Set a target CPL to get a call on this ad.", "action": "", "replace": False, "fatigue": False, "hints": []}
+                elif stale:
+                    call = {"status": engine.INACTIVE, "level": None, "replace": False, "fatigue": False, "hints": [],
+                            "reason": f"No spend since {last_spend} while other reports keep coming in.", "action": "Already paused? Then nothing to decide."}
+                elif not cur:
+                    call = {"status": engine.NO_DATA, "level": None, "replace": False, "fatigue": False, "hints": [],
+                            "reason": f"No report for this ad between {bounds['cur_from']} and {bounds['cur_to']}.", "action": "File the daily report for this ad."}
+                else:
+                    call = engine.decide(cur_agg, engine.aggregate(prev) if prev else None, target, settings["min_qualified_pct"], age)
+                if call["status"] in counts:
+                    counts[call["status"]] += 1
+                counts["replace"] += 1 if call["replace"] else 0
+                if call["status"] in (engine.KILL, engine.SCALE, engine.OPTIMIZE):
+                    actions.append({
+                        "ad_id": ad["id"], "ad_name": ad.get("name") or "", "campaign_name": c.get("name") or "",
+                        "ad_set_name": a.get("name") or "", **{k: call[k] for k in ("status", "level", "reason", "action", "replace")},
+                    })
+                ads_out.append({
+                    "id": ad["id"], "name": ad.get("name") or "", "ad_type": ad.get("ad_type") or "static",
+                    "metrics": cur_agg, "day": engine.aggregate(within(rows, day, day)),
+                    "first_spend": first_spend, "decision": call,
+                })
+                set_cur += cur
+            if ads_out:
+                ad_sets.append({
+                    "id": a.get("id"), "name": a.get("name") or "", "ads": ads_out, **group(set_cur),
+                    "replace_needed": sum(1 for x in ads_out if x["decision"]["replace"]),
+                })
+                camp_cur += set_cur
+        if ad_sets:
+            campaigns.append({"id": c.get("id"), "name": c.get("name") or "", "ad_sets": ad_sets, **group(camp_cur)})
+            all_cur += camp_cur
+
+    priority = {engine.KILL: 0, engine.SCALE: 1, engine.OPTIMIZE: 2}
+    actions.sort(key=lambda x: priority[x["status"]])
+    return {
+        "project": {"project_id": project_id, "name": project.get("name") or ""},
+        "day": day, "window_days": n, "window": {"from": bounds["cur_from"], "to": bounds["cur_to"]},
+        "data_through": data_through, "day_reported": data_through == day,
+        "settings": settings, "configured": bool(target), "thresholds": engine.thresholds(target) if target else None,
+        "can_edit_settings": await _is_operation_head_or_admin(user, db),
+        "totals": engine.aggregate(all_cur), "counts": counts, "actions": actions, "campaigns": campaigns,
+    }

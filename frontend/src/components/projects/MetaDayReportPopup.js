@@ -12,6 +12,31 @@ const cplOf = (spend, leads) => (Number(leads) > 0 ? Number(spend) / Number(lead
 const cplText = (spend, leads) => { const v = cplOf(spend, leads); return v == null ? '—' : money(v); };
 const longDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
 
+// Per-ad inputs: leads + spend are the core report; the rest are optional and
+// power the project's Decisions tab (CTR, CPC, frequency, lead quality).
+const FIELDS = [
+  { key: 'leads', entry: 'total_leads' },
+  { key: 'spend', entry: 'total_spend' },
+  { key: 'reach', entry: 'reach' },
+  { key: 'impressions', entry: 'impressions' },
+  { key: 'link_clicks', entry: 'link_clicks' },
+  { key: 'qualified_leads', entry: 'qualified_leads' },
+  { key: 'appointments', entry: 'appointments' },
+];
+const numOk = (s) => s === '' || (Number(s) >= 0 && Number.isFinite(Number(s)));
+// What's wrong with one ad's inputs, if anything (mirrors the server's checks).
+const problemOf = (v) => {
+  if (FIELDS.some(f => !numOk(v[f.key]))) return 'Enter numbers of 0 or more';
+  const n = (k) => (v[k] === '' ? null : Number(v[k]));
+  if (n('impressions') != null && n('link_clicks') != null && n('link_clicks') > n('impressions')) return "Link clicks can't be more than impressions";
+  if (n('impressions') != null && n('reach') != null && n('reach') > n('impressions')) return "Reach can't be more than impressions";
+  if (n('qualified_leads') != null && n('qualified_leads') > (n('leads') ?? 0)) return "Qualified leads can't be more than leads";
+  return null;
+};
+const ratioOf = (a, b, mult = 1) => (Number(b) > 0 ? (Number(a) / Number(b)) * mult : null);
+const pctText = (v) => (v == null ? '—' : `${Number(v.toFixed(2))}%`);
+const dash = (v, fmt = num) => (v == null || v === '' ? '—' : fmt(v));
+
 const IMAGE_URL = /\.(png|jpe?g|gif|webp|avif)(\?.*)?$/i;
 const thumbCache = new Map();
 
@@ -40,12 +65,12 @@ function AdThumb({ ad, headersRef, borderColor, textSecondary }) {
 
 const sel = (bgSecondary, borderColor, textPrimary) => `w-full h-9 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 text-sm disabled:opacity-50`;
 
-/** The Ads sub-popup: one row per ad of the ad set — creative, name, leads, spend, CPL — auto-saved. */
+/** The Ads sub-popup: one row per ad of the ad set — creative, name, leads, spend, CPL and the optional decision inputs — auto-saved. */
 function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDetail, onClose, theme, canEdit }) {
   const { bgCard, bgSecondary, textPrimary, textSecondary, borderColor } = theme;
   const [values, setValues] = useState(() => Object.fromEntries((adSet.ads || []).map(ad => {
     const e = saved.find(x => x.ad_id === ad.id);
-    return [ad.id, { leads: e ? String(e.total_leads) : '', spend: e ? String(e.total_spend) : '' }];
+    return [ad.id, Object.fromEntries(FIELDS.map(f => [f.key, e && e[f.entry] != null ? String(e[f.entry]) : '']))];
   })));
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
   const valuesRef = useRef(values);
@@ -57,13 +82,13 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
   const firstRef = useRef(true);
   const inflight = useRef(0);
 
-  const invalid = useMemo(() => Object.values(values).some(v => ['leads', 'spend'].some(k => v[k] !== '' && !(Number(v[k]) >= 0 && Number.isFinite(Number(v[k]))))), [values]);
+  const problem = useMemo(() => Object.values(values).map(problemOf).find(Boolean) || null, [values]);
+  const invalid = !!problem;
 
   const doSave = useCallback(async () => {
     const { campaign: camp, adSet: set, onDetail: report } = propsRef.current;
     const cur = valuesRef.current;
-    const bad = Object.values(cur).some(v => ['leads', 'spend'].some(k => v[k] !== '' && !(Number(v[k]) >= 0 && Number.isFinite(Number(v[k])))));
-    if (bad) { setStatus('error'); return false; }
+    if (Object.values(cur).some(v => problemOf(v))) { setStatus('error'); return false; }
     inflight.current += 1;
     setStatus('saving');
     try {
@@ -72,8 +97,7 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
         ad_set_id: set.id,
         rows: (set.ads || []).map(ad => ({
           ad_id: ad.id,
-          leads: cur[ad.id].leads === '' ? null : Number(cur[ad.id].leads),
-          spend: cur[ad.id].spend === '' ? null : Number(cur[ad.id].spend),
+          ...Object.fromEntries(FIELDS.map(f => [f.key, cur[ad.id][f.key] === '' ? null : Number(cur[ad.id][f.key])])),
         })),
       }, { headers: headersRef.current });
       dirtyRef.current = valuesRef.current !== cur;
@@ -113,7 +137,7 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
   const finish = async (saveClicked) => {
     clearTimeout(timerRef.current);
     if (!canEdit) { onClose(true); return; }
-    if (invalid) { toast.error('Enter leads and spend as numbers of 0 or more'); return; }
+    if (invalid) { toast.error(problem); return; }
     let ok = true;
     if (dirtyRef.current || saveClicked) ok = await enqueue();
     if (ok) onClose(true);
@@ -125,12 +149,26 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
   const totLeads = ads.reduce((s, ad) => s + (Number(values[ad.id].leads) || 0), 0);
   const totSpend = ads.reduce((s, ad) => s + (Number(values[ad.id].spend) || 0), 0);
   const inputCls = `h-9 w-full rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 text-sm text-right tabular-nums`;
+  // Computed per ad from what's typed: frequency, CTR, CPC, cost per appointment.
+  const calc = (v) => ({
+    freq: v.impressions !== '' && v.reach !== '' ? ratioOf(v.impressions, v.reach) : null,
+    ctr: v.impressions !== '' && v.link_clicks !== '' ? ratioOf(v.link_clicks, v.impressions, 100) : null,
+    cpc: v.link_clicks !== '' ? ratioOf(v.spend || 0, v.link_clicks) : null,
+    cpa: v.appointments !== '' ? ratioOf(v.spend || 0, v.appointments) : null,
+  });
+  const optCols = [
+    { key: 'reach', label: 'Reach' },
+    { key: 'impressions', label: 'Impressions' },
+    { key: 'link_clicks', label: 'Link Clicks' },
+    { key: 'qualified_leads', label: 'Qualified Leads' },
+    { key: 'appointments', label: 'Appts' },
+  ];
   const th = `px-3 py-2 text-[11px] font-medium uppercase ${textSecondary}`;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={(e) => { e.stopPropagation(); finish(false); }} data-testid="meta-report-ads-popup">
       <div
-        className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-3xl max-h-[88vh] flex flex-col`}
+        className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-7xl max-h-[88vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`p-4 border-b ${borderColor} flex items-start justify-between gap-3`}>
@@ -142,33 +180,57 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
         </div>
 
         <div className="overflow-auto flex-1">
-          <table className="w-full">
+          <table className="w-full min-w-[1180px]">
             <thead className={bgSecondary}>
               <tr>
-                <th className={`${th} text-left w-20`}>Ad Creative</th>
-                <th className={`${th} text-left`}>Ad Name</th>
-                <th className={`${th} text-right w-32`}>No. Leads</th>
-                <th className={`${th} text-right w-36`}>Spend (₹)</th>
-                <th className={`${th} text-right w-28`}>CPL</th>
+                <th className={`${th} text-left w-20`} rowSpan={2}>Ad Creative</th>
+                <th className={`${th} text-left`} rowSpan={2}>Ad Name</th>
+                <th className={`${th} text-center`} colSpan={3}>Report</th>
+                <th className={`${th} text-center border-l ${borderColor}`} colSpan={9} title="Optional — the Decisions tab uses these for CTR, CPC, frequency and lead-quality checks">Decision inputs <span className="normal-case font-normal">(optional)</span></th>
+              </tr>
+              <tr>
+                <th className={`${th} text-right w-24`}>No. Leads</th>
+                <th className={`${th} text-right w-28`}>Spend (₹)</th>
+                <th className={`${th} text-right w-20`}>CPL</th>
+                {optCols.slice(0, 3).map((c, i) => <th key={c.key} className={`${th} text-right w-28 ${i === 0 ? `border-l ${borderColor}` : ''}`}>{c.label}</th>)}
+                <th className={`${th} text-right w-16`}>Freq.</th>
+                <th className={`${th} text-right w-16`}>CTR</th>
+                <th className={`${th} text-right w-20`}>CPC</th>
+                {optCols.slice(3).map(c => <th key={c.key} className={`${th} text-right w-28`}>{c.label}</th>)}
+                <th className={`${th} text-right w-24`}>Cost / Appt</th>
               </tr>
             </thead>
             <tbody>
-              {ads.map(ad => (
-                <tr key={ad.id} className={`border-t ${borderColor}`} data-testid={`meta-report-ad-row-${ad.id}`}>
-                  <td className="px-3 py-2"><AdThumb ad={ad} headersRef={headersRef} borderColor={borderColor} textSecondary={textSecondary} /></td>
-                  <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>
-                    {ad.name || 'Untitled ad'}
-                    <span className={`block text-[10px] font-normal capitalize ${textSecondary}`}>{ad.ad_type}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].leads} onChange={(e) => setVal(ad.id, 'leads', e.target.value)} disabled={!canEdit} className={`${inputCls} disabled:opacity-70`} placeholder="0" data-testid={`meta-report-leads-${ad.id}`} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].spend} onChange={(e) => setVal(ad.id, 'spend', e.target.value)} disabled={!canEdit} className={`${inputCls} disabled:opacity-70`} placeholder="0" data-testid={`meta-report-spend-${ad.id}`} />
-                  </td>
-                  <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{cplText(values[ad.id].spend, values[ad.id].leads)}</td>
-                </tr>
-              ))}
+              {ads.map(ad => {
+                const v = values[ad.id];
+                const c = calc(v);
+                const bad = problemOf(v);
+                const field = (k) => (
+                  <input type="number" min="0" step="any" inputMode="decimal" value={v[k]} onChange={(e) => setVal(ad.id, k, e.target.value)} disabled={!canEdit} className={`${inputCls} disabled:opacity-70 ${bad && v[k] !== '' ? 'border-red-500' : ''}`} placeholder={k === 'leads' || k === 'spend' ? '0' : '—'} data-testid={`meta-report-${k.replace(/_/g, '-')}-${ad.id}`} />
+                );
+                const calcCell = (text) => <td className={`px-3 py-2 text-sm text-right tabular-nums ${textSecondary}`}>{text}</td>;
+                return (
+                  <tr key={ad.id} className={`border-t ${borderColor}`} data-testid={`meta-report-ad-row-${ad.id}`}>
+                    <td className="px-3 py-2"><AdThumb ad={ad} headersRef={headersRef} borderColor={borderColor} textSecondary={textSecondary} /></td>
+                    <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>
+                      {ad.name || 'Untitled ad'}
+                      <span className={`block text-[10px] font-normal capitalize ${textSecondary}`}>{ad.ad_type}</span>
+                    </td>
+                    <td className="px-3 py-2">{field('leads')}</td>
+                    <td className="px-3 py-2">{field('spend')}</td>
+                    <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{cplText(v.spend, v.leads)}</td>
+                    <td className={`px-3 py-2 border-l ${borderColor}`}>{field('reach')}</td>
+                    <td className="px-3 py-2">{field('impressions')}</td>
+                    <td className="px-3 py-2">{field('link_clicks')}</td>
+                    {calcCell(dash(c.freq, x => x.toFixed(2)))}
+                    {calcCell(pctText(c.ctr))}
+                    {calcCell(dash(c.cpc, money))}
+                    <td className="px-3 py-2">{field('qualified_leads')}</td>
+                    <td className="px-3 py-2">{field('appointments')}</td>
+                    {calcCell(dash(c.cpa, money))}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className={`border-t-2 ${borderColor} ${bgSecondary}`}>
@@ -176,6 +238,7 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
                 <td className={`px-3 py-2 text-sm text-right font-semibold tabular-nums ${textPrimary}`}>{num(totLeads)}</td>
                 <td className={`px-3 py-2 text-sm text-right font-semibold tabular-nums ${textPrimary}`}>{money(totSpend)}</td>
                 <td className={`px-3 py-2 text-sm text-right font-semibold tabular-nums ${textPrimary}`}>{cplText(totSpend, totLeads)}</td>
+                <td colSpan={9} />
               </tr>
             </tfoot>
           </table>
@@ -183,7 +246,7 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
 
         <div className={`p-4 border-t ${borderColor} flex items-center justify-between gap-3`}>
           <span className={`text-xs ${status === 'error' || invalid ? 'text-red-500' : textSecondary}`} data-testid="meta-report-autosave-status">
-            {!canEdit ? 'View only' : invalid ? 'Enter numbers of 0 or more' : status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ All changes saved' : status === 'error' ? 'Could not save — try again' : 'Changes save automatically'}
+            {!canEdit ? 'View only' : invalid ? problem : status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ All changes saved' : status === 'error' ? 'Could not save — try again' : 'Changes save automatically'}
           </span>
           <Button type="button" onClick={() => finish(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="meta-report-ads-save">{canEdit ? 'Save' : 'Close'}</Button>
         </div>
@@ -275,6 +338,10 @@ export default function MetaDayReportPopup({
           <th className={`${th} text-right w-28`}>No. Leads</th>
           <th className={`${th} text-right w-32`}>Spend</th>
           <th className={`${th} text-right w-28`}>CPL</th>
+          <th className={`${th} text-right w-24`}>Impr.</th>
+          <th className={`${th} text-right w-20`}>CTR</th>
+          <th className={`${th} text-right w-24`}>Qualified</th>
+          <th className={`${th} text-right w-20`}>Appts</th>
         </tr>
       </thead>
       <tbody>
@@ -287,6 +354,10 @@ export default function MetaDayReportPopup({
               <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{num(e.total_leads)}</td>
               <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{money(e.total_spend)}</td>
               <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{cplText(e.total_spend, e.total_leads)}</td>
+              <td className={`px-3 py-2 text-sm text-right tabular-nums ${textSecondary}`}>{dash(e.impressions)}</td>
+              <td className={`px-3 py-2 text-sm text-right tabular-nums ${textSecondary}`}>{e.impressions != null && e.link_clicks != null ? pctText(ratioOf(e.link_clicks, e.impressions, 100)) : '—'}</td>
+              <td className={`px-3 py-2 text-sm text-right tabular-nums ${textSecondary}`}>{dash(e.qualified_leads)}</td>
+              <td className={`px-3 py-2 text-sm text-right tabular-nums ${textSecondary}`}>{dash(e.appointments)}</td>
             </tr>
           );
         })}
