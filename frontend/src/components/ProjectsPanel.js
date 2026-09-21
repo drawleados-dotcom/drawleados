@@ -1906,13 +1906,23 @@ export default function ProjectsPanel({
             { id: 'delivery_history', label: 'Delivery History', icon: History },
             { id: 'daily_notes', label: 'Daily Notes', icon: NotebookPen },
           ];
+          // Meta Ads projects lead with Campaigns, then their working tabs;
+          // any other tab the project has (Delivery History, Daily Notes, ...)
+          // keeps its usual order after them.
+          const META_TAB_ORDER = ['campaigns', 'tasks', 'reports', 'daily_optimization', 'scopes', 'expense', 'payment', 'additional'];
+          const orderedTabs = isMetaAdsProject
+            ? [
+                ...META_TAB_ORDER.map((id) => innerTabs.find((t) => t.id === id)).filter(Boolean),
+                ...innerTabs.filter((t) => !META_TAB_ORDER.includes(t.id)),
+              ]
+            : innerTabs;
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
             setTimeout(() => setProjectInnerTab('tasks'), 0);
           }
           return (
             <div className="flex gap-2 flex-wrap" data-testid="project-inner-tabs">
-              {innerTabs.map((t) => {
+              {orderedTabs.map((t) => {
                 const Icon = t.icon;
                 return (
                   <button
@@ -3837,10 +3847,11 @@ export default function ProjectsPanel({
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
                       // Website projects land on Pages, their own primary tab; Social
-                      // Media projects land on Content Calendar; everything else —
+                      // Media projects land on Content Calendar; Meta Ads projects
+                      // land on Campaigns (their first tab); everything else —
                       // including ERP — lands on Tasks.
                       const deps = p.departments || [];
-                      setProjectInnerTab(deps.includes('website') ? 'pages' : deps.includes('social_media') ? 'content_calendar' : 'tasks');
+                      setProjectInnerTab(deps.includes('meta') ? 'campaigns' : deps.includes('website') ? 'pages' : deps.includes('social_media') ? 'content_calendar' : 'tasks');
                       setSelectedProject(p);
                       try {
                         const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
