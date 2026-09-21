@@ -506,22 +506,36 @@ def _entity_active_on(entity: dict, day: str) -> bool:
     return True
 
 
-def _ad_due_on(campaign: dict, ad_set: dict, ad: dict, day: str) -> bool:
-    """An ad has to be reported on `day` unless it, its ad set, or its
-    campaign is paused or outside its Start/End Date window. An ad with no
-    Start Date of its own falls back to when it was created (created_at) so
-    ads that predate this feature keep behaving as they always have."""
-    if not _entity_active_on(campaign, day) or not _entity_active_on(ad_set, day):
-        return False
+def _due_reason(campaign: dict, ad_set: dict, ad: dict, day: str):
+    """(is_due, reason_if_not) for one ad on one day — checked campaign, then
+    ad set, then the ad itself, so the first blocker found is the one shown.
+    An ad with no Start Date of its own falls back to when it was created
+    (created_at) so ads that predate this feature keep behaving as they
+    always have."""
+    for label, entity in (("campaign", campaign), ("ad set", ad_set)):
+        if entity.get("active") is False:
+            return False, f"its {label} is paused"
+        start = (entity.get("start_date") or "")[:10]
+        if start and day < start:
+            return False, f"its {label} starts {start}"
+        end = (entity.get("end_date") or "")[:10]
+        if end and day > end:
+            return False, f"its {label} ended {end}"
     if ad.get("active") is False:
-        return False
+        return False, "it is paused"
     start = (ad.get("start_date") or ad.get("created_at") or "")[:10]
     if start and day < start:
-        return False
+        return False, f"it starts {start}"
     end = (ad.get("end_date") or "")[:10]
     if end and day > end:
-        return False
-    return True
+        return False, f"it ended {end}"
+    return True, None
+
+
+def _ad_due_on(campaign: dict, ad_set: dict, ad: dict, day: str) -> bool:
+    """An ad has to be reported on `day` unless it, its ad set, or its
+    campaign is paused or outside its Start/End Date window."""
+    return _due_reason(campaign, ad_set, ad, day)[0]
 
 
 async def _load_meta_project(user, db, project_id: str) -> dict:
@@ -643,16 +657,23 @@ async def _day_detail(db, project: dict, day: str) -> dict:
     daily = next((d for d in docs if d.get("kind") == DAILY), None)
     task = await db.our_tasks.find_one({"task_id": daily["task_id"]}, {"_id": 0, "status": 1}) if daily and daily.get("task_id") else None
     summary = _day_summary(project, day, docs, task)
-    structure = []
+    structure, excluded, all_ads_in_project = [], [], 0
     for c in project.get("campaigns") or []:
         ad_sets = []
         for a in c.get("ad_sets") or []:
-            ads = [
-                {"id": ad.get("id"), "name": ad.get("name") or "", "ad_type": ad.get("ad_type") or "static",
-                 "creative_link": ad.get("creative_link") or "",
-                 "creative_file_id": ad.get("creative_file_id"), "editing_file_id": ad.get("editing_file_id")}
-                for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(c, a, ad, day)
-            ]
+            ads = []
+            for ad in a.get("ads") or []:
+                if not ad.get("id"):
+                    continue
+                all_ads_in_project += 1
+                is_due, reason = _due_reason(c, a, ad, day)
+                if is_due:
+                    ads.append({"id": ad.get("id"), "name": ad.get("name") or "", "ad_type": ad.get("ad_type") or "static",
+                                "creative_link": ad.get("creative_link") or "",
+                                "creative_file_id": ad.get("creative_file_id"), "editing_file_id": ad.get("editing_file_id")})
+                else:
+                    excluded.append({"id": ad.get("id"), "name": ad.get("name") or "", "ad_set_name": a.get("name") or "",
+                                      "campaign_name": c.get("name") or "", "reason": reason})
             ad_sets.append({"id": a.get("id"), "name": a.get("name") or "", "ads": ads})
         structure.append({"id": c.get("id"), "name": c.get("name") or "", "ad_sets": ad_sets})
     legacy_entries = [
@@ -665,6 +686,8 @@ async def _day_detail(db, project: dict, day: str) -> dict:
         "structure": structure,
         "entries": (daily or {}).get("entries") or [],
         "legacy_entries": legacy_entries,
+        "all_ads_in_project": all_ads_in_project,
+        "excluded": excluded,
     }
 
 

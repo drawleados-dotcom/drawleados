@@ -206,13 +206,13 @@ export default function ProjectAdsTab({
 
   const openDates = (row) => {
     if (!canEdit) return;
-    setDatesModal({ campaignId: row.c.id, adSetId: row.a.id, adId: row.ad.id, start_date: row.ad.start_date || '', end_date: row.ad.end_date || '' });
+    setDatesModal({ campaignId: row.c.id, adSetId: row.a.id, adId: row.ad.id, created_at: row.ad.created_at || '', start_date: row.ad.start_date || '', end_date: row.ad.end_date || '' });
   };
   const saveDates = async () => {
     const m = datesModal;
     if (m.start_date && m.end_date && m.end_date < m.start_date) { toast.error('End date must be on or after the start date'); return; }
     setSaving(true);
-    const ok = await persist(list => mapAd(list, m.campaignId, m.adSetId, m.adId, ad => ({ ...ad, start_date: m.start_date || null, end_date: m.end_date || null })));
+    const ok = await persist(list => mapAd(list, m.campaignId, m.adSetId, m.adId, ad => ({ ...ad, created_at: m.created_at || null, start_date: m.start_date || null, end_date: m.end_date || null })));
     setSaving(false);
     if (ok) { toast.success('Dates saved'); setDatesModal(null); }
   };
@@ -421,9 +421,9 @@ export default function ProjectAdsTab({
                           >
                             {ad.active !== false ? 'Active' : 'Paused'}
                           </button>
-                          {(ad.start_date || ad.end_date) && (
+                          {(ad.start_date || ad.created_at || ad.end_date) && (
                             <span className={`text-[10px] ${textSecondary}`}>
-                              {ad.start_date ? fmtDate(ad.start_date) : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
+                              {ad.start_date ? fmtDate(ad.start_date) : ad.created_at ? `${fmtDate(ad.created_at)} (created)` : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
                             </span>
                           )}
                           {canEdit && (
@@ -667,11 +667,23 @@ export default function ProjectAdsTab({
             </div>
             <div className="p-5 space-y-3">
               <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Date of Creation</p>
+                <Input
+                  type="date"
+                  value={datesModal.created_at}
+                  onChange={(e) => setDatesModal(m => ({ ...m, created_at: e.target.value }))}
+                  className={inputCls}
+                  data-testid="ad-dates-created"
+                />
+                <p className={`text-[11px] ${textSecondary} mt-1`}>Used as the Start Date below when that's left blank, and for the "New Ads" count on the Performance View.</p>
+              </div>
+              <div>
                 <p className={`text-xs font-medium ${textSecondary} mb-1`}>Start Date</p>
                 <Input
                   type="date"
                   value={datesModal.start_date}
                   onChange={(e) => setDatesModal(m => ({ ...m, start_date: e.target.value }))}
+                  placeholder={datesModal.created_at || ''}
                   className={inputCls}
                   data-testid="ad-dates-start"
                 />
@@ -686,7 +698,7 @@ export default function ProjectAdsTab({
                   data-testid="ad-dates-end"
                 />
               </div>
-              <p className={`text-[11px] ${textSecondary}`}>Reports for this ad are only expected on or after the start date, and stop being expected after the end date.</p>
+              <p className={`text-[11px] ${textSecondary}`}>Reports for this ad are only expected on or after the start date (or the date of creation, if no start date is set), and stop being expected after the end date.</p>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={() => setDatesModal(null)}>Cancel</Button>

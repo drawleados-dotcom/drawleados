@@ -454,7 +454,26 @@ export default function MetaDayReportPopup({
               )}
 
               {cov.ads_total === 0 ? (
-                <p className={`text-sm ${textSecondary} text-center py-6`}>This project had no ads on this day, so there is nothing to report.</p>
+                (detail.all_ads_in_project || 0) === 0 ? (
+                  <p className={`text-sm ${textSecondary} text-center py-6`}>This project has no ads yet, so there is nothing to report.</p>
+                ) : (
+                  <div className="text-center py-6 space-y-2" data-testid="meta-report-no-due-ads">
+                    <p className={`text-sm ${textPrimary}`}>
+                      {detail.all_ads_in_project} ad{detail.all_ads_in_project === 1 ? '' : 's'} exist{detail.all_ads_in_project === 1 ? 's' : ''} in this project, but none are due to be reported on {longDate(date)}.
+                    </p>
+                    {(detail.excluded || []).length > 0 && (
+                      <div className={`text-left max-w-md mx-auto rounded-lg border ${borderColor} divide-y ${borderColor} max-h-48 overflow-y-auto`}>
+                        {detail.excluded.map((e) => (
+                          <div key={e.id} className="px-3 py-2 text-xs" data-testid={`meta-report-excluded-${e.id}`}>
+                            <span className={`font-medium ${textPrimary}`}>{e.name}</span>
+                            <span className={textSecondary}> ({e.campaign_name} › {e.ad_set_name}) — {e.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className={`text-[11px] ${textSecondary}`}>Set on the Campaigns / Ads tabs — Active/Paused, Start Date, End Date.</p>
+                  </div>
+                )
               ) : (
                 <div className={`rounded-xl border ${borderColor} overflow-x-auto`}>
                   <div className={`grid grid-cols-[minmax(160px,1.4fr)_minmax(160px,1.4fr)_120px_90px_110px_90px_36px] gap-3 px-4 py-2 ${bgSecondary}`}>
