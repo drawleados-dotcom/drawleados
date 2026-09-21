@@ -239,7 +239,7 @@ export default function ProjectCampaignsTab({
       }
     } else if (m.type === 'ad') {
       if (m.mode === 'add') {
-        next = mapAdSet(m.campaignId, m.adSetId, a => ({ ...a, ads: [...(a.ads || []), { id: newId('ad'), name }] }));
+        next = mapAdSet(m.campaignId, m.adSetId, a => ({ ...a, ads: [...(a.ads || []), { id: newId('ad'), name, created_at: todayIST() }] }));
         msg = 'Ad added';
       } else {
         next = mapAdSet(m.campaignId, m.adSetId, a => ({ ...a, ads: (a.ads || []).map(x => (x.id === m.id ? { ...x, name } : x)) }));

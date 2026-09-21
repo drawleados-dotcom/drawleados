@@ -29,6 +29,7 @@ import ProjectAdsTab from './projects/ProjectAdsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
 import ProjectDailyOptimizationTab from './projects/ProjectDailyOptimizationTab';
 import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
+import MetaPerformanceView from './projects/MetaPerformanceView';
 import ProjectsNotesHistoryPanel from './projects/ProjectsNotesHistoryPanel';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -103,6 +104,7 @@ export default function ProjectsPanel({
   const [editingWeblink, setEditingWeblink] = useState(false);
   const [weblinkDraft, setWeblinkDraft] = useState('');
   const [editingProjectName, setEditingProjectName] = useState(false);
+  const [metaListView, setMetaListView] = useState('projects'); // Meta Ads department: 'projects' | 'performance'
   const [projectNameDraft, setProjectNameDraft] = useState('');
   const [editingProposalLink, setEditingProposalLink] = useState(false);
   const [proposalLinkDraft, setProposalLinkDraft] = useState('');
@@ -1025,6 +1027,21 @@ export default function ProjectsPanel({
   // department/status scope means.
   // Picking a department defaults its status filter to "Developing" when
   // that department's own status vocabulary has one, else "all".
+  const openProject = async (p) => {
+    // Optimistic UI — show the project shell immediately, then hydrate with tasks.
+    // Website projects land on Pages, their own primary tab; Social
+    // Media projects land on Content Calendar; Meta Ads projects
+    // land on Campaigns (their first tab); everything else —
+    // including ERP — lands on Tasks.
+    const deps = p.departments || [];
+    setProjectInnerTab(deps.includes('meta') ? 'campaigns' : deps.includes('website') ? 'pages' : deps.includes('social_media') ? 'content_calendar' : 'tasks');
+    setSelectedProject(p);
+    try {
+      const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
+      setSelectedProject(res.data);
+    } catch { /* ignore — keep optimistic copy */ }
+  };
+
   const defaultStatusForDept = (deptKey) => {
     const statuses = deptStatuses.find(d => d.dept_key === deptKey)?.statuses || [];
     return statuses.includes('Developing') ? 'Developing' : 'all';
@@ -3821,12 +3838,40 @@ export default function ProjectsPanel({
         <>
           {navTabsBar}
 
+          {deptFilter === 'meta' && !showNotesHistory && (
+            <div className={`inline-flex items-center gap-1 p-1 mb-4 rounded-lg border ${borderColor} ${bgCard}`} data-testid="meta-list-view-tabs">
+              {[{ id: 'projects', label: 'Project View' }, { id: 'performance', label: 'Performance View' }].map(v => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setMetaListView(v.id)}
+                  data-testid={`meta-list-view-${v.id}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${metaListView === v.id ? 'bg-[#6366f1] text-white' : `${textSecondary} hover:bg-[#6366f1]/10`}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {showNotesHistory ? (
             <ProjectsNotesHistoryPanel
               department={deptFilter === 'all' ? '' : deptFilter}
               departmentLabel={deptFilter === 'all' ? 'all' : (DEPARTMENTS.find(d => d.value === deptFilter)?.label || deptFilter)}
               onClose={() => setShowNotesHistory(false)}
               headers={headers}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          ) : deptFilter === 'meta' && metaListView === 'performance' ? (
+            <MetaPerformanceView
+              statusFilter={statusFilter}
+              canEditRecharges={canManageProjects}
+              headers={headers}
+              onOpenProject={(id) => { const p = projects.find(x => x.project_id === id); if (p) openProject(p); }}
               bgCard={bgCard}
               bgSecondary={bgSecondary}
               textPrimary={textPrimary}
@@ -3864,20 +3909,7 @@ export default function ProjectsPanel({
                   <tr
                     key={p.project_id}
                     className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors ${p.is_pinned ? 'bg-amber-500/5' : ''}`}
-                    onClick={async () => {
-                      // Optimistic UI — show the project shell immediately, then hydrate with tasks.
-                      // Website projects land on Pages, their own primary tab; Social
-                      // Media projects land on Content Calendar; Meta Ads projects
-                      // land on Campaigns (their first tab); everything else —
-                      // including ERP — lands on Tasks.
-                      const deps = p.departments || [];
-                      setProjectInnerTab(deps.includes('meta') ? 'campaigns' : deps.includes('website') ? 'pages' : deps.includes('social_media') ? 'content_calendar' : 'tasks');
-                      setSelectedProject(p);
-                      try {
-                        const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
-                        setSelectedProject(res.data);
-                      } catch { /* ignore — keep optimistic copy */ }
-                    }}
+                    onClick={() => openProject(p)}
                     data-testid={`project-row-${p.project_id}`}
                   >
                     <td className="px-2 py-3" onClick={(e) => e.stopPropagation()} {...projectDragProps(p.project_id)}>
