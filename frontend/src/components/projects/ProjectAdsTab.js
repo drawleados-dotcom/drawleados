@@ -138,6 +138,7 @@ export default function ProjectAdsTab({
   const [showImport, setShowImport] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [budgetModal, setBudgetModal] = useState(null);
+  const [datesModal, setDatesModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(null); // an uploaded creative being viewed
 
@@ -162,7 +163,9 @@ export default function ProjectAdsTab({
   // array would wipe those submissions out.
   const persist = async (mutate) => {
     try {
-      const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+      // include_tasks=false — this only needs `.campaigns`, and the default
+      // fetch drags along the project's entire (unbounded) task history.
+      const fresh = await axios.get(`${API}/api/projects/${project.project_id}?include_tasks=false`, { headers });
       const next = mutate(fresh.data?.campaigns || []);
       const res = await axios.patch(`${API}/api/projects/${project.project_id}`, { campaigns: next }, { headers });
       onProjectUpdated?.(res.data);
@@ -190,6 +193,28 @@ export default function ProjectAdsTab({
   const cycleSetup = (row) => {
     if (!canEdit) return;
     persist(list => mapAd(list, row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, setup_status: nextSetup(ad.setup_status) })));
+  };
+
+  // Active/Paused — a manual on/off separate from the ad's Start/End Date.
+  // Missing `active` means active, so nothing already saved changes behavior.
+  const toggleAdActive = async (row) => {
+    if (!canEdit) return;
+    const wasActive = row.ad.active !== false;
+    const ok = await persist(list => mapAd(list, row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, active: !wasActive })));
+    if (ok) toast.success(wasActive ? 'Ad paused' : 'Ad activated');
+  };
+
+  const openDates = (row) => {
+    if (!canEdit) return;
+    setDatesModal({ campaignId: row.c.id, adSetId: row.a.id, adId: row.ad.id, start_date: row.ad.start_date || '', end_date: row.ad.end_date || '' });
+  };
+  const saveDates = async () => {
+    const m = datesModal;
+    if (m.start_date && m.end_date && m.end_date < m.start_date) { toast.error('End date must be on or after the start date'); return; }
+    setSaving(true);
+    const ok = await persist(list => mapAd(list, m.campaignId, m.adSetId, m.adId, ad => ({ ...ad, start_date: m.start_date || null, end_date: m.end_date || null })));
+    setSaving(false);
+    if (ok) { toast.success('Dates saved'); setDatesModal(null); }
   };
 
   const openWork = (row, work) => {
@@ -383,6 +408,30 @@ export default function ProjectAdsTab({
                       <td className="p-3 min-w-[200px]">
                         <p className={`text-sm font-medium ${textPrimary}`}>{ad.name || '—'}</p>
                         <p className={`text-xs ${textSecondary}`}>{a.name || '—'} | {c.name || '—'}</p>
+                        <div className="flex items-center gap-1.5 mt-1" data-testid={`ad-dates-${ad.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleAdActive(row)}
+                            disabled={!canEdit}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
+                              ad.active !== false ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+                            } ${canEdit ? 'hover:opacity-80' : 'cursor-default'}`}
+                            title={canEdit ? (ad.active !== false ? 'Click to pause' : 'Click to activate') : ''}
+                            data-testid={`ad-dates-${ad.id}-toggle`}
+                          >
+                            {ad.active !== false ? 'Active' : 'Paused'}
+                          </button>
+                          {(ad.start_date || ad.end_date) && (
+                            <span className={`text-[10px] ${textSecondary}`}>
+                              {ad.start_date ? fmtDate(ad.start_date) : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
+                            </span>
+                          )}
+                          {canEdit && (
+                            <button type="button" onClick={() => openDates(row)} className="text-[10px] text-[#6366f1] hover:underline" data-testid={`ad-dates-${ad.id}-edit`}>
+                              {(ad.start_date || ad.end_date) ? 'Edit dates' : 'Set dates'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3 min-w-[140px]">
                         {(a.locations || []).length === 0 ? (
@@ -602,6 +651,46 @@ export default function ProjectAdsTab({
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={() => setBudgetModal(null)}>Cancel</Button>
               <Button type="button" onClick={saveBudget} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="ad-budget-save">
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {datesModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => setDatesModal(null)}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+              <h3 className={`text-base font-semibold ${textPrimary}`}>Ad Dates</h3>
+              <button onClick={() => setDatesModal(null)} className={textSecondary}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Start Date</p>
+                <Input
+                  type="date"
+                  value={datesModal.start_date}
+                  onChange={(e) => setDatesModal(m => ({ ...m, start_date: e.target.value }))}
+                  className={inputCls}
+                  data-testid="ad-dates-start"
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>End Date</p>
+                <Input
+                  type="date"
+                  value={datesModal.end_date}
+                  onChange={(e) => setDatesModal(m => ({ ...m, end_date: e.target.value }))}
+                  className={inputCls}
+                  data-testid="ad-dates-end"
+                />
+              </div>
+              <p className={`text-[11px] ${textSecondary}`}>Reports for this ad are only expected on or after the start date, and stop being expected after the end date.</p>
+            </div>
+            <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
+              <Button type="button" variant="outline" onClick={() => setDatesModal(null)}>Cancel</Button>
+              <Button type="button" onClick={saveDates} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="ad-dates-save">
                 {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>

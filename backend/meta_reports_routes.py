@@ -493,10 +493,35 @@ def _next_day(day: str) -> str:
     return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
-def _ad_due_on(ad: dict, day: str) -> bool:
-    """An ad has to be reported on `day` unless it was only created afterwards."""
-    created = (ad.get("created_at") or "")[:10]
-    return not created or created <= day
+def _entity_active_on(entity: dict, day: str) -> bool:
+    """Active flag + Start/End Date gate, shared by Campaign, Ad Set and Ad."""
+    if entity.get("active") is False:
+        return False
+    start = (entity.get("start_date") or "")[:10]
+    if start and day < start:
+        return False
+    end = (entity.get("end_date") or "")[:10]
+    if end and day > end:
+        return False
+    return True
+
+
+def _ad_due_on(campaign: dict, ad_set: dict, ad: dict, day: str) -> bool:
+    """An ad has to be reported on `day` unless it, its ad set, or its
+    campaign is paused or outside its Start/End Date window. An ad with no
+    Start Date of its own falls back to when it was created (created_at) so
+    ads that predate this feature keep behaving as they always have."""
+    if not _entity_active_on(campaign, day) or not _entity_active_on(ad_set, day):
+        return False
+    if ad.get("active") is False:
+        return False
+    start = (ad.get("start_date") or ad.get("created_at") or "")[:10]
+    if start and day < start:
+        return False
+    end = (ad.get("end_date") or "")[:10]
+    if end and day > end:
+        return False
+    return True
 
 
 async def _load_meta_project(user, db, project_id: str) -> dict:
@@ -516,7 +541,7 @@ def _coverage(project: dict, entries: list, day: str) -> dict:
         c_total = c_rep = 0
         ad_sets = []
         for a in c.get("ad_sets") or []:
-            ids = [ad["id"] for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(ad, day)]
+            ids = [ad["id"] for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(c, a, ad, day)]
             rep = [i for i in ids if i in reported]
             if ids:
                 ad_sets.append({"id": a.get("id"), "name": a.get("name") or "", "ads_total": len(ids),
@@ -626,7 +651,7 @@ async def _day_detail(db, project: dict, day: str) -> dict:
                 {"id": ad.get("id"), "name": ad.get("name") or "", "ad_type": ad.get("ad_type") or "static",
                  "creative_link": ad.get("creative_link") or "",
                  "creative_file_id": ad.get("creative_file_id"), "editing_file_id": ad.get("editing_file_id")}
-                for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(ad, day)
+                for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(c, a, ad, day)
             ]
             ad_sets.append({"id": a.get("id"), "name": a.get("name") or "", "ads": ads})
         structure.append({"id": c.get("id"), "name": c.get("name") or "", "ad_sets": ad_sets})
@@ -915,7 +940,7 @@ async def get_decisions(
         for a in c.get("ad_sets") or []:
             set_cur, ads_out = [], []
             for ad in a.get("ads") or []:
-                if not ad.get("id") or not _ad_due_on(ad, day):
+                if not ad.get("id") or not _ad_due_on(c, a, ad, day):
                     continue
                 rows = by_ad.get(ad["id"], [])
                 cur = within(rows, bounds["cur_from"], bounds["cur_to"])

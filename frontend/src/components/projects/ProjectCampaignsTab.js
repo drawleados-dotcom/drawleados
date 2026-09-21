@@ -62,6 +62,36 @@ function BudgetCell({ history, canEdit, onSet, onRemove, textPrimary, textSecond
   );
 }
 
+// Active/Paused pill + the Start/End Date range, if any is set. The pill
+// toggles immediately (no popup); the dates themselves are edited from the
+// same modal as the name (the pencil / "Edit" action).
+function DatesCell({ active, startDate, endDate, canEdit, onToggle, textPrimary, textSecondary, testId }) {
+  const isActive = active !== false;
+  return (
+    <div className="space-y-1" data-testid={testId}>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!canEdit}
+        className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
+          isActive ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+        } ${canEdit ? 'hover:opacity-80' : 'cursor-default'}`}
+        title={canEdit ? (isActive ? 'Click to pause' : 'Click to activate') : ''}
+        data-testid={`${testId}-toggle`}
+      >
+        {isActive ? 'Active' : 'Paused'}
+      </button>
+      {(startDate || endDate) ? (
+        <p className={`text-[11px] ${textSecondary}`}>
+          {startDate ? fmtDate(startDate) : 'No start'} → {endDate ? fmtDate(endDate) : 'ongoing'}
+        </p>
+      ) : (
+        <p className={`text-[11px] ${textSecondary}`}>No dates set</p>
+      )}
+    </div>
+  );
+}
+
 // The "Budget History" tab of the budget popup: one row per budget period
 // (From, To, Budget) newest first. `leadsFor(from, to)` is only passed for
 // campaigns — leads come from the daily Meta reports, which are per campaign.
@@ -134,7 +164,7 @@ export default function ProjectCampaignsTab({
   // Ad sets / ads / budgets are Meta Ads concepts; the same tab also serves
   // SEO projects, which keep the plain named list.
   const isMeta = (project?.departments || []).includes('meta');
-  const colSpan = isMeta ? 7 : 3;
+  const colSpan = isMeta ? 8 : 3;
 
   const [modal, setModal] = useState(null);
   const [showImport, setShowImport] = useState(false);
@@ -187,7 +217,9 @@ export default function ProjectCampaignsTab({
       // older copy of the campaigns can't wipe it out on save.
       let merged = next;
       try {
-        const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+        // include_tasks=false — this only needs `.campaigns`, and the default
+        // fetch drags along the project's entire (unbounded) task history.
+        const fresh = await axios.get(`${API}/api/projects/${project.project_id}?include_tasks=false`, { headers });
         merged = mergeFreshAdWork(next, fresh.data?.campaigns || []);
       } catch (e) { /* couldn't re-read — save what we have */ }
       const res = await axios.patch(
@@ -216,6 +248,10 @@ export default function ProjectCampaignsTab({
     const m = modal;
     const name = (m.name || '').trim();
     if (m.type !== 'budget' && !name) { toast.error(`${MODAL_LABEL[m.type]} name is required`); return; }
+    if ((m.type === 'campaign' || m.type === 'adset') && m.start_date && m.end_date && m.end_date < m.start_date) {
+      toast.error('End date must be on or after the start date');
+      return;
+    }
 
     let amount = null;
     if (m.type === 'budget' || String(m.amount ?? '').trim() !== '') {
@@ -229,10 +265,10 @@ export default function ProjectCampaignsTab({
     let msg;
     if (m.type === 'campaign') {
       if (m.mode === 'add') {
-        next = [...campaigns, { id: newId('camp'), name, budget_history: firstBudget, ad_sets: [] }];
+        next = [...campaigns, { id: newId('camp'), name, budget_history: firstBudget, ad_sets: [], start_date: m.start_date || null, end_date: m.end_date || null }];
         msg = 'Campaign added';
       } else {
-        next = mapCampaign(m.id, c => ({ ...c, name }));
+        next = mapCampaign(m.id, c => ({ ...c, name, start_date: m.start_date || null, end_date: m.end_date || null }));
         msg = 'Campaign updated';
       }
     } else if (m.type === 'adset') {
@@ -240,11 +276,11 @@ export default function ProjectCampaignsTab({
       if (m.mode === 'add') {
         next = mapCampaign(m.campaignId, c => ({
           ...c,
-          ad_sets: [...(c.ad_sets || []), { id: newId('adset'), name, locations, budget_history: firstBudget, ads: [] }],
+          ad_sets: [...(c.ad_sets || []), { id: newId('adset'), name, locations, budget_history: firstBudget, ads: [], start_date: m.start_date || null, end_date: m.end_date || null }],
         }));
         msg = 'Ad set added';
       } else {
-        next = mapAdSet(m.campaignId, m.id, a => ({ ...a, name, locations }));
+        next = mapAdSet(m.campaignId, m.id, a => ({ ...a, name, locations, start_date: m.start_date || null, end_date: m.end_date || null }));
         msg = 'Ad set updated';
       }
     } else if (m.type === 'ad') {
@@ -307,6 +343,22 @@ export default function ProjectCampaignsTab({
     mapAdSet(c.id, a.id, aa => ({ ...aa, budget_history: (aa.budget_history || []).filter(e => e.id !== entryId) })),
     'Budget entry removed',
   );
+
+  // Active/Paused — a manual on/off separate from the schedule (Start/End
+  // Date). Missing `active` means active, so nothing already saved changes
+  // behavior. Pausing a campaign or ad set also takes every ad under it out
+  // of "due for a report" (see meta_reports_routes._ad_due_on) without
+  // having to touch each ad.
+  const toggleCampaignActive = async (c) => {
+    const wasActive = c.active !== false;
+    const ok = await persist(mapCampaign(c.id, cc => ({ ...cc, active: !wasActive })));
+    if (ok) toast.success(wasActive ? 'Campaign paused' : 'Campaign activated');
+  };
+  const toggleAdSetActive = async (c, a) => {
+    const wasActive = a.active !== false;
+    const ok = await persist(mapAdSet(c.id, a.id, aa => ({ ...aa, active: !wasActive })));
+    if (ok) toast.success(wasActive ? 'Ad set paused' : 'Ad set activated');
+  };
 
   // Total of every campaign's daily budget in effect today.
   const currentAmountOf = (history) => Number(currentEntryOf(history)?.amount) || 0;
@@ -376,7 +428,7 @@ export default function ProjectCampaignsTab({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => open({ type: 'adset', mode: 'add', campaignId: c.id, name: '', locations: '', amount: '', from_date: todayIST() })}
+            onClick={() => open({ type: 'adset', mode: 'add', campaignId: c.id, name: '', locations: '', amount: '', from_date: todayIST(), start_date: '', end_date: '' })}
             data-testid={`adset-add-${c.id}`}
           >
             <Plus className="h-3.5 w-3.5 mr-1" /> Add Ad Set
@@ -395,6 +447,7 @@ export default function ProjectCampaignsTab({
                 <th className={th}>Locations</th>
                 <th className={th}>Daily Budget</th>
                 <th className={th}>Ads</th>
+                <th className={th}>Dates</th>
                 <th className={`${th} text-right w-24`}>Actions</th>
               </tr>
             </thead>
@@ -433,12 +486,24 @@ export default function ProjectCampaignsTab({
                       />
                     </td>
                     <td className={`p-3 text-sm ${textSecondary}`}>{(a.ads || []).length}</td>
+                    <td className="p-3">
+                      <DatesCell
+                        active={a.active}
+                        startDate={a.start_date}
+                        endDate={a.end_date}
+                        canEdit={canEdit}
+                        onToggle={() => toggleAdSetActive(c, a)}
+                        textPrimary={textPrimary}
+                        textSecondary={textSecondary}
+                        testId={`adset-dates-${a.id}`}
+                      />
+                    </td>
                     <td className="p-3 text-right">
                       {canEdit && (
                         <div className="inline-flex gap-1">
                           <button
                             type="button"
-                            onClick={() => open({ type: 'adset', mode: 'edit', campaignId: c.id, id: a.id, name: a.name, locations: (a.locations || []).join(', ') })}
+                            onClick={() => open({ type: 'adset', mode: 'edit', campaignId: c.id, id: a.id, name: a.name, locations: (a.locations || []).join(', '), start_date: a.start_date || '', end_date: a.end_date || '' })}
                             className={iconBtn}
                             title="Edit ad set"
                             data-testid={`adset-edit-${a.id}`}
@@ -454,7 +519,7 @@ export default function ProjectCampaignsTab({
                   </tr>
                   {expanded[`a:${a.id}`] && (
                     <tr className={`border-b ${borderColor}`}>
-                      <td colSpan={6} className="p-0">{renderAds(c, a)}</td>
+                      <td colSpan={7} className="p-0">{renderAds(c, a)}</td>
                     </tr>
                   )}
                 </React.Fragment>
@@ -490,7 +555,7 @@ export default function ProjectCampaignsTab({
             </Button>
             <Button
               type="button"
-              onClick={() => open({ type: 'campaign', mode: 'add', name: '', amount: '', from_date: todayIST() })}
+              onClick={() => open({ type: 'campaign', mode: 'add', name: '', amount: '', from_date: todayIST(), start_date: '', end_date: '' })}
               size="sm"
               className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
               data-testid="campaign-add-btn"
@@ -531,6 +596,7 @@ export default function ProjectCampaignsTab({
                   {isMeta && <th className={th}>Daily Budget</th>}
                   {isMeta && <th className={th}>Ad Sets</th>}
                   {isMeta && <th className={th}>Ads</th>}
+                  {isMeta && <th className={th}>Dates</th>}
                   <th className={`${th} text-right w-24`}>Actions</th>
                 </tr>
               </thead>
@@ -562,10 +628,24 @@ export default function ProjectCampaignsTab({
                       )}
                       {isMeta && <td className={`p-3 text-sm ${textSecondary}`} data-testid={`campaign-adsets-count-${c.id}`}>{(c.ad_sets || []).length}</td>}
                       {isMeta && <td className={`p-3 text-sm ${textSecondary}`} data-testid={`campaign-ads-count-${c.id}`}>{adsIn(c)}</td>}
+                      {isMeta && (
+                        <td className="p-3">
+                          <DatesCell
+                            active={c.active}
+                            startDate={c.start_date}
+                            endDate={c.end_date}
+                            canEdit={canEdit}
+                            onToggle={() => toggleCampaignActive(c)}
+                            textPrimary={textPrimary}
+                            textSecondary={textSecondary}
+                            testId={`campaign-dates-${c.id}`}
+                          />
+                        </td>
+                      )}
                       <td className="p-3 text-right">
                         <div className="inline-flex gap-1">
                           {canEdit && (
-                            <button type="button" onClick={() => open({ type: 'campaign', mode: 'edit', id: c.id, name: c.name })} className={iconBtn} title="Rename" data-testid={`campaign-edit-${c.id}`}>
+                            <button type="button" onClick={() => open({ type: 'campaign', mode: 'edit', id: c.id, name: c.name, start_date: c.start_date || '', end_date: c.end_date || '' })} className={iconBtn} title="Rename" data-testid={`campaign-edit-${c.id}`}>
                               <Pencil className="h-4 w-4" />
                             </button>
                           )}
@@ -604,6 +684,7 @@ export default function ProjectCampaignsTab({
                     </td>
                     <td className={`p-3 text-sm font-semibold ${textPrimary}`} data-testid="campaign-adsets-total">{totalAdSets}</td>
                     <td className={`p-3 text-sm font-semibold ${textPrimary}`} data-testid="campaign-ads-total">{totalAds}</td>
+                    <td />
                     <td />
                   </tr>
                 </tfoot>
@@ -698,6 +779,33 @@ export default function ProjectCampaignsTab({
                     data-testid="adset-form-locations"
                   />
                   <p className={`text-[11px] ${textSecondary} mt-1`}>Separate multiple locations with commas.</p>
+                </div>
+              )}
+              {isMeta && (modal.type === 'campaign' || modal.type === 'adset') && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className={`text-xs font-medium ${textSecondary} mb-1`}>Start Date</p>
+                    <Input
+                      type="date"
+                      value={modal.start_date || ''}
+                      onChange={(e) => setModal(m => ({ ...m, start_date: e.target.value }))}
+                      className={inputCls}
+                      data-testid="campaign-form-start-date"
+                    />
+                  </div>
+                  <div>
+                    <p className={`text-xs font-medium ${textSecondary} mb-1`}>End Date</p>
+                    <Input
+                      type="date"
+                      value={modal.end_date || ''}
+                      onChange={(e) => setModal(m => ({ ...m, end_date: e.target.value }))}
+                      className={inputCls}
+                      data-testid="campaign-form-end-date"
+                    />
+                  </div>
+                  <p className={`text-[11px] ${textSecondary} col-span-2`}>
+                    Reports for this {modal.type === 'campaign' ? 'campaign' : 'ad set'} (and everything under it) are only expected on or after the start date, and stop being expected after the end date.
+                  </p>
                 </div>
               )}
               {((modal.type === 'budget' && modal.tab !== 'history') || (isMeta && modal.mode === 'add' && (modal.type === 'campaign' || modal.type === 'adset'))) && (
