@@ -100,6 +100,8 @@ export default function ProjectsPanel({
   const [showClientPortalModal, setShowClientPortalModal] = useState(false);
   const [editingWeblink, setEditingWeblink] = useState(false);
   const [weblinkDraft, setWeblinkDraft] = useState('');
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState('');
   const [editingProposalLink, setEditingProposalLink] = useState(false);
   const [proposalLinkDraft, setProposalLinkDraft] = useState('');
   const [showResetDeliveryModal, setShowResetDeliveryModal] = useState(false);
@@ -442,9 +444,24 @@ export default function ProjectsPanel({
       setSelectedProject(prev => prev ? { ...prev, [field]: value || null } : prev);
       loadProjects();
       toast.success('Project updated');
+      return true;
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update project');
+      return false;
     }
+  };
+
+  const saveProjectName = async () => {
+    const name = projectNameDraft.replace(/\s+/g, ' ').trim();
+    if (!name) {
+      toast.error('Project name is required');
+      return;
+    }
+    if (name === selectedProject?.name) {
+      setEditingProjectName(false);
+      return;
+    }
+    if (await updateProjectField('name', name)) setEditingProjectName(false);
   };
 
   // A bare domain (e.g. "www.drawlead.com") in an <a href> resolves as a
@@ -458,6 +475,7 @@ export default function ProjectsPanel({
 
   // Reset the Weblink edit state whenever a different project is opened.
   useEffect(() => {
+    setEditingProjectName(false);
     setEditingWeblink(false);
     setWeblinkDraft('');
     setShowHandoverRequestModal(false);
@@ -1331,7 +1349,49 @@ export default function ProjectsPanel({
               ← Back to Projects
             </button>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
+              {editingProjectName ? (
+                <div className="flex items-center gap-2" data-testid="project-name-editor">
+                  <input
+                    type="text"
+                    value={projectNameDraft}
+                    onChange={(e) => setProjectNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveProjectName();
+                      if (e.key === 'Escape') setEditingProjectName(false);
+                    }}
+                    maxLength={120}
+                    autoFocus
+                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-xl font-bold min-w-[240px]`}
+                    data-testid="project-name-input"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={saveProjectName}
+                    className="h-8 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="project-name-save"
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingProjectName(false)} className="h-8 px-3" data-testid="project-name-cancel">
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <h2 className={`text-2xl font-bold ${textPrimary}`} data-testid="project-name-heading">{selectedProject.name}</h2>
+                  {canManageProjects && (
+                    <button
+                      type="button"
+                      onClick={() => { setProjectNameDraft(selectedProject.name || ''); setEditingProjectName(true); }}
+                      className={`p-1 rounded-md ${textSecondary} hover:text-[#6366f1] hover:bg-[#6366f1]/10`}
+                      title="Edit project name"
+                      data-testid="project-name-edit-btn"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
+              )}
               {selectedProject.start_date && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600 border border-emerald-500/30" data-testid="project-header-start-badge">
                   Start: {fmtDate(selectedProject.start_date)}

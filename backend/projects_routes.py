@@ -414,6 +414,11 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
     update_data = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    if "name" in update_data:
+        new_name = " ".join((update_data["name"] or "").split())
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Project name is required")
+        update_data["name"] = new_name
     # If client_id is being updated, validate and refresh client_name.
     if "client_id" in update_data:
         new_cid = (update_data["client_id"] or "").strip()
@@ -451,6 +456,12 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
     result = await db.projects.update_one({"project_id": project_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Project not found")
+    if "name" in update_data:
+        # Tasks keep a copy of the project name (HR time reports read it).
+        await db.our_tasks.update_many(
+            {"project_id": project_id},
+            {"$set": {"project_name": update_data["name"]}},
+        )
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     return project
 
