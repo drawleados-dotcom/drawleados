@@ -160,7 +160,7 @@ export default function ProjectCampaignsTab({
   // Ad sets / ads / budgets are Meta Ads concepts; the same tab also serves
   // SEO projects, which keep the plain named list.
   const isMeta = (project?.departments || []).includes('meta');
-  const colSpan = isMeta ? 6 : 3;
+  const colSpan = isMeta ? 7 : 3;
 
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -329,6 +329,9 @@ export default function ProjectCampaignsTab({
   const currentAmountOf = (history) => Number(currentEntryOf(history)?.amount) || 0;
   const totalCurrentBudget = campaigns.reduce((sum, c) => sum + currentAmountOf(c.budget_history), 0);
   const budgetedCampaigns = campaigns.filter(c => currentAmountOf(c.budget_history) > 0).length;
+  const adsIn = (c) => (c.ad_sets || []).reduce((sum, a) => sum + (a.ads || []).length, 0);
+  const totalAdSets = campaigns.reduce((sum, c) => sum + (c.ad_sets || []).length, 0);
+  const totalAds = campaigns.reduce((sum, c) => sum + adsIn(c), 0);
 
   // What the budget popup is currently about (re-read from live data so the
   // history tab reflects a save/removal immediately).
@@ -515,6 +518,7 @@ export default function ProjectCampaignsTab({
                   <th className={th}>Campaign Name</th>
                   {isMeta && <th className={th}>Daily Budget</th>}
                   {isMeta && <th className={th}>Ad Sets</th>}
+                  {isMeta && <th className={th}>Ads</th>}
                   <th className={`${th} text-right w-24`}>Actions</th>
                 </tr>
               </thead>
@@ -544,7 +548,8 @@ export default function ProjectCampaignsTab({
                           />
                         </td>
                       )}
-                      {isMeta && <td className={`p-3 text-sm ${textSecondary}`}>{(c.ad_sets || []).length}</td>}
+                      {isMeta && <td className={`p-3 text-sm ${textSecondary}`} data-testid={`campaign-adsets-count-${c.id}`}>{(c.ad_sets || []).length}</td>}
+                      {isMeta && <td className={`p-3 text-sm ${textSecondary}`} data-testid={`campaign-ads-count-${c.id}`}>{adsIn(c)}</td>}
                       <td className="p-3 text-right">
                         <div className="inline-flex gap-1">
                           {canEdit && (
@@ -579,13 +584,15 @@ export default function ProjectCampaignsTab({
                 <tfoot>
                   <tr className={`border-t-2 ${borderColor} ${bgSecondary}`} data-testid="campaign-budget-total-row">
                     <td colSpan={3} className={`p-3 text-right text-xs font-semibold uppercase ${textSecondary}`}>
-                      Total daily budget (current)
+                      Total
                     </td>
                     <td className="p-3">
                       <span className={`text-sm font-semibold ${textPrimary}`} data-testid="campaign-budget-total">{money(totalCurrentBudget)}/day</span>
                       <span className={`text-[11px] ${textSecondary} ml-2`}>{budgetedCampaigns} of {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'} with a budget</span>
                     </td>
-                    <td colSpan={2} />
+                    <td className={`p-3 text-sm font-semibold ${textPrimary}`} data-testid="campaign-adsets-total">{totalAdSets}</td>
+                    <td className={`p-3 text-sm font-semibold ${textPrimary}`} data-testid="campaign-ads-total">{totalAds}</td>
+                    <td />
                   </tr>
                 </tfoot>
               )}
