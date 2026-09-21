@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { X, Plus, Trash2, CheckCircle2, Pencil, Image as ImageIcon } from 'lucide-react';
+import { X, Plus, Trash2, CheckCircle2, Pencil, Image as ImageIcon, Upload } from 'lucide-react';
 import { Button } from '../ui/button';
+import { parseMetaCsv } from './metaCsvImport';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -23,6 +24,7 @@ const FIELDS = [
   { key: 'qualified_leads', entry: 'qualified_leads' },
   { key: 'appointments', entry: 'appointments' },
 ];
+const norm = (s) => (s || '').trim().toLowerCase();
 const numOk = (s) => s === '' || (Number(s) >= 0 && Number.isFinite(Number(s)));
 // What's wrong with one ad's inputs, if anything (mirrors the server's checks).
 const problemOf = (v) => {
@@ -145,6 +147,58 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
 
   finishRef.current = finish;
   const setVal = (adId, key, v) => setValues(prev => ({ ...prev, [adId]: { ...prev[adId], [key]: v } }));
+
+  // Import: fill leads/spend/impressions/reach for this exact ad set and day
+  // from a Meta Ads Manager export, matching rows to the ads already listed
+  // here by name — it doesn't create ads or touch other days. The existing
+  // auto-save picks the change up like it was typed in.
+  const importRef = useRef(null);
+  const [importErr, setImportErr] = useState('');
+  const CSV_KEYS = { leads: 'leads', spend: 'spend', impressions: 'impressions', reach: 'reach' };
+  const pickImportFile = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setImportErr('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseMetaCsv(String(reader.result || ''), 'ad');
+      if (parsed.dateError) { setImportErr(parsed.dateError); return; }
+      if (parsed.levelMismatch) { setImportErr(`This looks like a ${parsed.detectedLevel === 'campaign' ? 'Campaign' : 'Ad Set'}-level export, not Ad-level.`); return; }
+      const dayGroup = parsed.days.find((d) => d.date === date);
+      if (!dayGroup) {
+        const found = parsed.days.map((d) => d.date).join(', ') || 'none';
+        setImportErr(`This file has no rows for ${longDate(date)} (found: ${found}).`);
+        return;
+      }
+      const byName = new Map(ads.map((ad) => [norm(ad.name), ad]));
+      let matched = 0;
+      const unmatched = [];
+      const patch = {};
+      dayGroup.rows.forEach((r) => {
+        const ad = byName.get(norm(r.name));
+        if (!ad) { unmatched.push(r.name); return; }
+        matched += 1;
+        const next = { ...valuesRef.current[ad.id] };
+        Object.entries(CSV_KEYS).forEach(([csvKey, valueKey]) => {
+          const v = r[csvKey];
+          if (v != null) next[valueKey] = String(v);
+        });
+        patch[ad.id] = next;
+      });
+      if (matched === 0) {
+        setImportErr(`None of this file's ad names matched an ad in "${adSet.name}".`);
+        return;
+      }
+      setValues((prev) => ({ ...prev, ...patch }));
+      toast.success(`Filled in ${matched} ad${matched === 1 ? '' : 's'} from the file`);
+      if (unmatched.length > 0) {
+        toast.error(`${unmatched.length} row${unmatched.length === 1 ? '' : 's'} in the file didn't match an ad here: ${unmatched.slice(0, 3).join(', ')}${unmatched.length > 3 ? '…' : ''}`);
+      }
+    };
+    reader.onerror = () => setImportErr("Couldn't read that file");
+    reader.readAsText(f);
+  };
   const ads = adSet.ads || [];
   const totLeads = ads.reduce((s, ad) => s + (Number(values[ad.id].leads) || 0), 0);
   const totSpend = ads.reduce((s, ad) => s + (Number(values[ad.id].spend) || 0), 0);
@@ -171,12 +225,25 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
         className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-7xl max-h-[88vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`p-4 border-b ${borderColor} flex items-start justify-between gap-3`}>
-          <div>
-            <h3 className={`text-base font-semibold ${textPrimary}`}>Ads</h3>
-            <p className={`text-xs ${textSecondary}`}>{campaign.name} <span className="mx-1">›</span> {adSet.name} · {longDate(date)}</p>
+        <div className={`p-4 border-b ${borderColor} space-y-2`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className={`text-base font-semibold ${textPrimary}`}>Ads</h3>
+              <p className={`text-xs ${textSecondary}`}>{campaign.name} <span className="mx-1">›</span> {adSet.name} · {longDate(date)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <>
+                  <input ref={importRef} type="file" accept=".csv,text/csv" onChange={pickImportFile} className="hidden" data-testid="meta-report-ads-import-input" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => importRef.current?.click()} title={`Fill in this ad set's numbers for ${longDate(date)} from a Meta export`} data-testid="meta-report-ads-import-btn">
+                    <Upload className="h-3.5 w-3.5 mr-1" /> Import
+                  </Button>
+                </>
+              )}
+              <button type="button" onClick={() => finish(false)} className={textSecondary} title="Close"><X className="h-5 w-5" /></button>
+            </div>
           </div>
-          <button type="button" onClick={() => finish(false)} className={textSecondary} title="Close"><X className="h-5 w-5" /></button>
+          {importErr && <p className="text-xs text-red-500" data-testid="meta-report-ads-import-error">{importErr}</p>}
         </div>
 
         <div className="overflow-auto flex-1">

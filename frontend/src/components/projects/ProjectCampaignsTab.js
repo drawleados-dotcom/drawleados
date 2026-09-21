@@ -248,7 +248,7 @@ export default function ProjectCampaignsTab({
     const m = modal;
     const name = (m.name || '').trim();
     if (m.type !== 'budget' && !name) { toast.error(`${MODAL_LABEL[m.type]} name is required`); return; }
-    if ((m.type === 'campaign' || m.type === 'adset') && m.start_date && m.end_date && m.end_date < m.start_date) {
+    if ((m.type === 'campaign' || m.type === 'adset' || m.type === 'ad') && m.start_date && m.end_date && m.end_date < m.start_date) {
       toast.error('End date must be on or after the start date');
       return;
     }
@@ -285,10 +285,21 @@ export default function ProjectCampaignsTab({
       }
     } else if (m.type === 'ad') {
       if (m.mode === 'add') {
-        next = mapAdSet(m.campaignId, m.adSetId, a => ({ ...a, ads: [...(a.ads || []), { id: newId('ad'), name, created_at: todayIST() }] }));
+        next = mapAdSet(m.campaignId, m.adSetId, a => ({
+          ...a,
+          ads: [...(a.ads || []), {
+            id: newId('ad'), name, created_at: m.created_at || todayIST(),
+            start_date: m.start_date || null, end_date: m.end_date || null,
+          }],
+        }));
         msg = 'Ad added';
       } else {
-        next = mapAdSet(m.campaignId, m.adSetId, a => ({ ...a, ads: (a.ads || []).map(x => (x.id === m.id ? { ...x, name } : x)) }));
+        next = mapAdSet(m.campaignId, m.adSetId, a => ({
+          ...a,
+          ads: (a.ads || []).map(x => (x.id === m.id ? {
+            ...x, name, created_at: m.created_at || null, start_date: m.start_date || null, end_date: m.end_date || null,
+          } : x)),
+        }));
         msg = 'Ad updated';
       }
     } else if (m.target === 'campaign') {
@@ -359,6 +370,11 @@ export default function ProjectCampaignsTab({
     const ok = await persist(mapAdSet(c.id, a.id, aa => ({ ...aa, active: !wasActive })));
     if (ok) toast.success(wasActive ? 'Ad set paused' : 'Ad set activated');
   };
+  const toggleAdActive = async (c, a, ad) => {
+    const wasActive = ad.active !== false;
+    const ok = await persist(mapAdSet(c.id, a.id, aa => ({ ...aa, ads: (aa.ads || []).map(x => (x.id === ad.id ? { ...x, active: !wasActive } : x)) })));
+    if (ok) toast.success(wasActive ? 'Ad paused' : 'Ad activated');
+  };
 
   // Total of every campaign's daily budget in effect today.
   const currentAmountOf = (history) => Number(currentEntryOf(history)?.amount) || 0;
@@ -392,7 +408,7 @@ export default function ProjectCampaignsTab({
         {canEdit && (
           <button
             type="button"
-            onClick={() => open({ type: 'ad', mode: 'add', campaignId: c.id, adSetId: a.id, name: '' })}
+            onClick={() => open({ type: 'ad', mode: 'add', campaignId: c.id, adSetId: a.id, name: '', created_at: todayIST(), start_date: '', end_date: '' })}
             className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
             data-testid={`ad-add-${a.id}`}
           >
@@ -402,11 +418,29 @@ export default function ProjectCampaignsTab({
       </div>
       {(a.ads || []).length === 0 && <p className={`text-xs ${textSecondary}`}>No ads yet.</p>}
       {(a.ads || []).map((ad, i) => (
-        <div key={ad.id} className={`flex items-center justify-between rounded-md px-2 py-1 border ${borderColor}`} data-testid={`ad-row-${ad.id}`}>
-          <span className={`text-sm ${textPrimary}`}><span className={`text-xs ${textSecondary} mr-2`}>{i + 1}</span>{ad.name}</span>
+        <div key={ad.id} className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 border ${borderColor}`} data-testid={`ad-row-${ad.id}`}>
+          <span className={`text-sm ${textPrimary} min-w-0 truncate`}><span className={`text-xs ${textSecondary} mr-2`}>{i + 1}</span>{ad.name}</span>
+          <span className="flex items-center gap-1.5 shrink-0" data-testid={`ad-inline-dates-${ad.id}`}>
+            <button
+              type="button"
+              onClick={() => toggleAdActive(c, a, ad)}
+              disabled={!canEdit}
+              className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
+                ad.active !== false ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+              } ${canEdit ? 'hover:opacity-80' : 'cursor-default'}`}
+              title={canEdit ? (ad.active !== false ? 'Click to pause' : 'Click to activate') : ''}
+            >
+              {ad.active !== false ? 'Active' : 'Paused'}
+            </button>
+            {(ad.start_date || ad.created_at || ad.end_date) && (
+              <span className={`text-[10px] ${textSecondary} whitespace-nowrap`}>
+                {ad.start_date ? fmtDate(ad.start_date) : ad.created_at ? `${fmtDate(ad.created_at)} (created)` : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
+              </span>
+            )}
+          </span>
           {canEdit && (
-            <span className="inline-flex gap-1">
-              <button type="button" onClick={() => open({ type: 'ad', mode: 'edit', campaignId: c.id, adSetId: a.id, id: ad.id, name: ad.name })} className={iconBtn} title="Rename">
+            <span className="inline-flex gap-1 shrink-0">
+              <button type="button" onClick={() => open({ type: 'ad', mode: 'edit', campaignId: c.id, adSetId: a.id, id: ad.id, name: ad.name, created_at: ad.created_at || '', start_date: ad.start_date || '', end_date: ad.end_date || '' })} className={iconBtn} title="Edit ad">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button type="button" onClick={() => deleteAd(c, a, ad)} className="p-1 text-red-500 hover:text-red-400" title="Delete">
@@ -781,8 +815,21 @@ export default function ProjectCampaignsTab({
                   <p className={`text-[11px] ${textSecondary} mt-1`}>Separate multiple locations with commas.</p>
                 </div>
               )}
-              {isMeta && (modal.type === 'campaign' || modal.type === 'adset') && (
+              {isMeta && (modal.type === 'campaign' || modal.type === 'adset' || modal.type === 'ad') && (
                 <div className="grid grid-cols-2 gap-3">
+                  {modal.type === 'ad' && (
+                    <div className="col-span-2">
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Date of Creation</p>
+                      <Input
+                        type="date"
+                        value={modal.created_at || ''}
+                        onChange={(e) => setModal(m => ({ ...m, created_at: e.target.value }))}
+                        className={inputCls}
+                        data-testid="campaign-form-created-at"
+                      />
+                      <p className={`text-[11px] ${textSecondary} mt-1`}>Used as the Start Date below when that's left blank, and for the "New Ads" count on the Performance View.</p>
+                    </div>
+                  )}
                   <div>
                     <p className={`text-xs font-medium ${textSecondary} mb-1`}>Start Date</p>
                     <Input
@@ -804,7 +851,8 @@ export default function ProjectCampaignsTab({
                     />
                   </div>
                   <p className={`text-[11px] ${textSecondary} col-span-2`}>
-                    Reports for this {modal.type === 'campaign' ? 'campaign' : 'ad set'} (and everything under it) are only expected on or after the start date, and stop being expected after the end date.
+                    Reports for this {modal.type === 'campaign' ? 'campaign' : modal.type === 'adset' ? 'ad set' : 'ad'}
+                    {modal.type !== 'ad' && ' (and everything under it)'} are only expected on or after the start date{modal.type === 'ad' ? ' (or the date of creation, if no start date is set)' : ''}, and stop being expected after the end date.
                   </p>
                 </div>
               )}
