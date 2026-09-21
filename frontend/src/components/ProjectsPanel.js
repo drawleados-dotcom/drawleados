@@ -3866,8 +3866,8 @@ export default function ProjectsPanel({
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 max-w-[240px]">
-                      <p className={`font-medium ${textPrimary} truncate`}>{p.name}</p>
+                    <td className="px-4 py-3 max-w-[300px]">
+                      <p className={`font-medium ${textPrimary} break-words leading-snug`} title={p.name}>{p.name}</p>
                       <p className={`text-xs ${textSecondary} truncate`}>{p.description || 'No description'}</p>
                     </td>
                     <td className="px-4 py-3">
