@@ -11,7 +11,7 @@ a per-date total summary with a collapsible campaign-wise breakdown.
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import math
 import re
 import uuid
@@ -86,6 +86,10 @@ def _clean_date(value: Optional[str], label: str) -> Optional[str]:
         return None
     if not ISO_DATE.match(value):
         raise HTTPException(status_code=400, detail=f"{label} must be YYYY-MM-DD")
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{label} is not a valid date")
     return value
 
 
@@ -188,6 +192,186 @@ async def meta_performance(
         })
     rows.sort(key=lambda r: (r["name"] or "").lower())
     return {"from": start, "to": end, "rows": rows}
+
+
+# ------------------------------------------------------- per-project summary
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _current_budget(history, today: str) -> float:
+    """Daily budget in effect today: the latest entry that has already started."""
+    started = [e for e in (history or []) if (e.get("from_date") or "9999") <= today]
+    if not started:
+        return 0.0
+    return _num(sorted(started, key=lambda e: e.get("from_date") or "")[-1].get("amount"))
+
+
+def _previous_range(start: Optional[str], end: Optional[str]):
+    """The equal-length window right before [start, end] (None when open-ended)."""
+    if not (start and end):
+        return None, None
+    s, e = date.fromisoformat(start), date.fromisoformat(end)
+    length = (e - s).days + 1
+    prev_end = s - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=length - 1)
+    return prev_start.isoformat(), prev_end.isoformat()
+
+
+def _cpl(spend: float, leads: float) -> Optional[float]:
+    return round(spend / leads, 2) if leads > 0 else None
+
+
+def _sum_reports(reports, start: Optional[str], end: Optional[str]):
+    """Spend / leads / conversions, lead quality, per-campaign and per-day
+    figures over the reports whose date falls inside [start, end]."""
+    ranged = bool(start or end)
+    total = {"spend": 0.0, "leads": 0.0, "convert": 0.0}
+    quality = {"good": 0, "average": 0, "poor": 0}
+    by_campaign, by_day = {}, {}
+    for r in reports:
+        day = (r.get("date") or "")[:10]
+        if ranged and not _in_range(day, start, end):
+            continue
+        for e in r.get("entries") or []:
+            spend, leads, convert = _num(e.get("total_spend")), _num(e.get("total_leads")), _num(e.get("convert"))
+            total["spend"] += spend
+            total["leads"] += leads
+            total["convert"] += convert
+            if e.get("quality") in quality:
+                quality[e["quality"]] += 1
+            key = e.get("campaign_id") or e.get("campaign_name") or ""
+            c = by_campaign.setdefault(key, {"name": e.get("campaign_name") or "", "spend": 0.0, "leads": 0.0, "convert": 0.0})
+            c["spend"] += spend
+            c["leads"] += leads
+            c["convert"] += convert
+            d = by_day.setdefault(day, {"spend": 0.0, "leads": 0.0})
+            d["spend"] += spend
+            d["leads"] += leads
+    return total, quality, by_campaign, by_day
+
+
+@meta_reports_router.get("/performance/{project_id}")
+async def meta_performance_detail(
+    project_id: str,
+    request: Request,
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    start = _clean_date(from_date, "from")
+    end = _clean_date(to_date, "to")
+    if start and end and start > end:
+        raise HTTPException(status_code=400, detail="from must not be after to")
+    ranged = bool(start or end)
+
+    project = await db.projects.find_one(
+        {"project_id": project_id, "departments": "meta", **(await _visible_projects_query(user, db))},
+        {"_id": 0, "project_id": 1, "name": 1, "status": 1, "client_name": 1, "campaigns": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    reports = await db.meta_ads_reports.find(
+        {"project_id": project_id}, {"_id": 0, "date": 1, "entries": 1}
+    ).to_list(20000)
+    recharges = await db.meta_ads_recharges.find({"project_id": project_id}, {"_id": 0}).to_list(5000)
+
+    total, quality, by_campaign, by_day = _sum_reports(reports, start, end)
+    spend_all = sum(_num(e.get("total_spend")) for r in reports for e in (r.get("entries") or []))
+    recharged_all = sum(_num(c.get("amount")) for c in recharges)
+    period_recharges = sorted(
+        [c for c in recharges if not ranged or _in_range(c.get("date"), start, end)],
+        key=lambda c: (c.get("date") or "", c.get("created_at") or ""), reverse=True,
+    )
+
+    today = datetime.now(IST).date().isoformat()
+    campaigns_out, seen = [], set()
+    n_campaigns = n_ad_sets = n_ads = n_active = n_new = 0
+    for c in project.get("campaigns") or []:
+        seen.add(c.get("id"))
+        ad_sets_out, c_ads, c_active, c_new = [], 0, 0, 0
+        for a in c.get("ad_sets") or []:
+            ads = a.get("ads") or []
+            active = sum(1 for ad in ads if ad.get("setup_status") == "published")
+            new = len(ads) if not ranged else sum(1 for ad in ads if _in_range(ad.get("created_at"), start, end))
+            ad_sets_out.append({"id": a.get("id"), "name": a.get("name") or "", "ads": len(ads), "active_ads": active, "new_ads": new})
+            c_ads += len(ads)
+            c_active += active
+            c_new += new
+        m = by_campaign.get(c.get("id"), {"spend": 0.0, "leads": 0.0, "convert": 0.0})
+        campaigns_out.append({
+            "id": c.get("id"), "name": c.get("name") or "", "in_project": True,
+            "daily_budget": _current_budget(c.get("budget_history"), today),
+            "ad_sets": ad_sets_out, "ads": c_ads, "active_ads": c_active, "new_ads": c_new,
+            "spend": round(m["spend"], 2), "leads": round(m["leads"], 2),
+            "cpl": _cpl(m["spend"], m["leads"]), "conversions": round(m["convert"], 2),
+        })
+        n_campaigns += 1
+        n_ad_sets += len(ad_sets_out)
+        n_ads += c_ads
+        n_active += c_active
+        n_new += c_new
+    # Reports can outlive a campaign that was later removed — keep their numbers visible.
+    for key, m in by_campaign.items():
+        if key in seen:
+            continue
+        campaigns_out.append({
+            "id": key, "name": m["name"] or "Removed campaign", "in_project": False,
+            "daily_budget": 0.0, "ad_sets": [], "ads": 0, "active_ads": 0, "new_ads": 0,
+            "spend": round(m["spend"], 2), "leads": round(m["leads"], 2),
+            "cpl": _cpl(m["spend"], m["leads"]), "conversions": round(m["convert"], 2),
+        })
+
+    # Trend: one point per day for windows up to ~2 months, else per month.
+    by_day_granular = bool(start and end and (date.fromisoformat(end) - date.fromisoformat(start)).days <= 62)
+    points = []
+    if by_day_granular:
+        d, last = date.fromisoformat(start), date.fromisoformat(end)
+        while d <= last:
+            v = by_day.get(d.isoformat(), {"spend": 0.0, "leads": 0.0})
+            points.append({"key": d.isoformat(), "spend": round(v["spend"], 2), "leads": round(v["leads"], 2)})
+            d += timedelta(days=1)
+    else:
+        months = {}
+        for day, v in by_day.items():
+            m = months.setdefault(day[:7], {"spend": 0.0, "leads": 0.0})
+            m["spend"] += v["spend"]
+            m["leads"] += v["leads"]
+        points = [{"key": k, "spend": round(v["spend"], 2), "leads": round(v["leads"], 2)} for k, v in sorted(months.items())]
+
+    prev_start, prev_end = _previous_range(start, end)
+    previous = None
+    if prev_start:
+        p_total, _, _, _ = _sum_reports(reports, prev_start, prev_end)
+        previous = {"spend": round(p_total["spend"], 2), "leads": round(p_total["leads"], 2), "cpl": _cpl(p_total["spend"], p_total["leads"])}
+
+    campaigns_out.sort(key=lambda c: (-c["spend"], (c["name"] or "").lower()))
+    return {
+        "project": {
+            "project_id": project["project_id"], "name": project.get("name") or "",
+            "client_name": project.get("client_name") or "", "status": project.get("status") or "active",
+        },
+        "from": start, "to": end,
+        "totals": {
+            "campaigns": n_campaigns, "ad_sets": n_ad_sets, "ads": n_ads, "active_ads": n_active, "new_ads": n_new,
+            "spend": round(total["spend"], 2), "leads": round(total["leads"], 2),
+            "cpl": _cpl(total["spend"], total["leads"]), "conversions": round(total["convert"], 2),
+            "recharged": round(sum(_num(c.get("amount")) for c in period_recharges), 2),
+        },
+        "previous": previous, "previous_range": {"from": prev_start, "to": prev_end} if prev_start else None,
+        "wallet": {
+            "recharged_all": round(recharged_all, 2), "spend_all": round(spend_all, 2),
+            "balance": round(recharged_all - spend_all, 2),
+        },
+        "quality": quality,
+        "campaigns": campaigns_out,
+        "trend": {"granularity": "day" if by_day_granular else "month", "points": points},
+        "recharges": [
+            {k: c.get(k) for k in ("recharge_id", "date", "amount", "note", "created_by_name")} for c in period_recharges
+        ],
+    }
 
 
 # ------------------------------------------------------------- recharge log

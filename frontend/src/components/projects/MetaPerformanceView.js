@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Trash2, X, ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
+import { Plus, Trash2, X, ChevronLeft, ChevronRight, Wallet, Eye } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import MetaPerformanceSummary from './MetaPerformanceSummary';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -43,6 +44,7 @@ export default function MetaPerformanceView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rechargeFor, setRechargeFor] = useState(null); // project row
+  const [summaryFor, setSummaryFor] = useState(null); // project row
   // The parent may hand over a fresh headers object every render — keep it out
   // of the effect deps so it can't retrigger the fetch.
   const headersRef = useRef(headers);
@@ -154,15 +156,16 @@ export default function MetaPerformanceView({
                 <th className={numTh}>Total Leads</th>
                 <th className={numTh}>Amount Recharged</th>
                 <th className={numTh}>Wallet Balance</th>
+                <th className={`${th} text-center w-16`}>Summary</th>
               </tr>
             </thead>
             <tbody>
               {loading && rows.length === 0 ? (
-                <tr><td colSpan={9} className={`p-8 text-center text-xs ${textSecondary}`}>Loading…</td></tr>
+                <tr><td colSpan={10} className={`p-8 text-center text-xs ${textSecondary}`}>Loading…</td></tr>
               ) : error ? (
-                <tr><td colSpan={9} className="p-8 text-center text-xs text-red-500">{error}</td></tr>
+                <tr><td colSpan={10} className="p-8 text-center text-xs text-red-500">{error}</td></tr>
               ) : visible.length === 0 ? (
-                <tr><td colSpan={9} className={`p-8 text-center text-xs ${textSecondary}`}>No Meta Ads projects{statusFilter !== 'all' ? ` with status “${statusFilter}”` : ''}.</td></tr>
+                <tr><td colSpan={10} className={`p-8 text-center text-xs ${textSecondary}`}>No Meta Ads projects{statusFilter !== 'all' ? ` with status “${statusFilter}”` : ''}.</td></tr>
               ) : visible.map(r => (
                 <tr key={r.project_id} className={`border-t ${borderColor} ${loading ? 'opacity-60' : ''}`} data-testid={`meta-perf-row-${r.project_id}`}>
                   <td className="px-4 py-3">
@@ -192,6 +195,17 @@ export default function MetaPerformanceView({
                     </span>
                   </td>
                   <td className={`${numTd} font-semibold ${r.wallet_balance < 0 ? '!text-red-500' : ''}`} data-testid={`meta-perf-balance-${r.project_id}`}>{money(r.wallet_balance)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setSummaryFor(r)}
+                      className="p-1.5 rounded-md text-[#6366f1] hover:bg-[#6366f1]/10"
+                      title="View summary"
+                      data-testid={`meta-perf-view-${r.project_id}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -207,6 +221,7 @@ export default function MetaPerformanceView({
                   <td className={`${numTd} font-semibold`}>{count(sum('total_leads'))}</td>
                   <td className={`${numTd} font-semibold`}>{money(sum('recharged'))}</td>
                   <td className={`${numTd} font-semibold ${sum('wallet_balance') < 0 ? '!text-red-500' : ''}`}>{money(sum('wallet_balance'))}</td>
+                  <td />
                 </tr>
               </tfoot>
             )}
@@ -217,6 +232,17 @@ export default function MetaPerformanceView({
         Campaigns, ad sets and active ads are current totals. New ads, spend, leads and recharges follow the period above.
         Wallet balance = all recharges − all spend from the daily reports.
       </p>
+
+      {summaryFor && (
+        <MetaPerformanceSummary
+          project={summaryFor}
+          range={range}
+          periodLabel={periodLabel}
+          headers={headers}
+          onClose={() => setSummaryFor(null)}
+          {...{ bgCard, bgSecondary, textPrimary, textSecondary, borderColor }}
+        />
+      )}
 
       {rechargeFor && (
         <RechargeModal
