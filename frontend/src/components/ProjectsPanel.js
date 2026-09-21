@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { categoryBadgeClass } from '../lib/categoryColor';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap, UserCircle, Image as ImageIcon } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap, UserCircle, Image as ImageIcon, Receipt } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -26,6 +26,7 @@ import ErpTaskModal from './projects/ErpTaskModal';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectAdsTab from './projects/ProjectAdsTab';
+import ProjectPaymentHistoryTab from './projects/ProjectPaymentHistoryTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
 import ProjectDailyOptimizationTab from './projects/ProjectDailyOptimizationTab';
 import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
@@ -1919,6 +1920,7 @@ export default function ProjectsPanel({
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject ? [{ id: 'ads', label: 'Ads', icon: ImageIcon }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
+            ...(isMetaAdsProject ? [{ id: 'payment_history', label: 'Payment History', icon: Receipt }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'daily_optimization', label: 'Daily Optimization', icon: Zap }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
             // Delivery Date History, then Daily Notes — both universal,
@@ -1929,7 +1931,7 @@ export default function ProjectsPanel({
           // Meta Ads projects lead with Campaigns, then their working tabs;
           // any other tab the project has (Delivery History, Daily Notes, ...)
           // keeps its usual order after them.
-          const META_TAB_ORDER = ['campaigns', 'ads', 'tasks', 'reports', 'daily_optimization', 'scopes', 'expense', 'payment', 'additional'];
+          const META_TAB_ORDER = ['campaigns', 'ads', 'tasks', 'reports', 'payment_history', 'daily_optimization', 'scopes', 'expense', 'payment', 'additional'];
           const orderedTabs = isMetaAdsProject
             ? [
                 ...META_TAB_ORDER.map((id) => innerTabs.find((t) => t.id === id)).filter(Boolean),
@@ -2243,6 +2245,18 @@ export default function ProjectsPanel({
             onTaskCreated={onTaskCreated}
             canEdit={canManageProjects}
             isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'payment_history' && (
+          <ProjectPaymentHistoryTab
+            project={selectedProject}
+            canEdit={canManageProjects}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}

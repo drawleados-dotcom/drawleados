@@ -73,6 +73,7 @@ from finance_subscriptions_routes import subscriptions_router, init_subscription
 from finance_vendors_routes import vendors_router, init_vendors_db
 from finance_expense_forecast_routes import expense_forecast_router, init_expense_forecast_db
 from meta_reports_routes import meta_reports_router
+from meta_payments_routes import meta_payments_router
 from ad_tasks_routes import ad_tasks_router
 from dashboard_routes import dashboard_router
 
@@ -3060,6 +3061,7 @@ api_router.include_router(linkedin_connections_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
 api_router.include_router(meta_reports_router)
+api_router.include_router(meta_payments_router)
 api_router.include_router(ad_tasks_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(db_admin_router)
