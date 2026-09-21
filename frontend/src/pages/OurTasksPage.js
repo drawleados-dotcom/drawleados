@@ -17,7 +17,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle,
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff, ChevronDown, Megaphone
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff, ChevronDown, Megaphone, Lock
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -1210,15 +1210,18 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           >
             <Pause className="h-3 w-3" />
           </Button>
-          <Button
-            size="sm"
-            onClick={() => handleTimeTracking(task.task_id, 'finish')}
-            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
-            data-testid={`time-finish-btn-${task.task_id}`}
-            title="Finish"
-          >
-            <Square className="h-3 w-3" />
-          </Button>
+          {/* Ad tasks complete by submitting from their panel, never by Finish. */}
+          {!task.ad_field && (
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'finish')}
+              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
+              data-testid={`time-finish-btn-${task.task_id}`}
+              title="Finish"
+            >
+              <Square className="h-3 w-3" />
+            </Button>
+          )}
           {editBtn}
         </div>
       );
@@ -1236,16 +1239,38 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           >
             <Play className="h-3 w-3" />
           </Button>
+          {/* Ad tasks complete by submitting from their panel, never by Finish. */}
+          {!task.ad_field && (
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'finish')}
+              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
+              data-testid={`time-finish-btn-${task.task_id}`}
+              title="Finish"
+            >
+              <Square className="h-3 w-3" />
+            </Button>
+          )}
+          {editBtn}
+        </div>
+      );
+    }
+
+    // Meta Ads ad task still waiting on an earlier step (Content, then
+    // Creative / Editing, then Ad Setup): the timer can't start yet, and the
+    // manual time entry is hidden too so it can't stand in for starting.
+    if (task.ad_blocked_message) {
+      return (
+        <div className="flex gap-1">
           <Button
             size="sm"
-            onClick={() => handleTimeTracking(task.task_id, 'finish')}
-            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
-            data-testid={`time-finish-btn-${task.task_id}`}
-            title="Finish"
+            disabled
+            className="bg-[#3f3f46] text-[#a1a1aa] h-8 px-2 cursor-not-allowed"
+            data-testid={`time-start-blocked-${task.task_id}`}
+            title={task.ad_blocked_message}
           >
-            <Square className="h-3 w-3" />
+            <Lock className="h-3 w-3" />
           </Button>
-          {editBtn}
         </div>
       );
     }

@@ -295,6 +295,16 @@ async def get_tasks(request: Request):
             task["assigned_by_name"] = users_map.get(task.get("assigned_by")) if task.get("assigned_by") else None
             task["created_by_name"] = users_map.get(task.get("created_by")) if task.get("created_by") else None
 
+        # Meta Ads ad tasks still waiting on an earlier step get flagged, so
+        # their timer button can be disabled instead of failing on click. Only
+        # decoration — a problem here must never break the task list.
+        try:
+            from ad_tasks_routes import annotate_ad_blocked
+            await annotate_ad_blocked(db, tasks)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not flag blocked ad tasks")
+
         return tasks
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

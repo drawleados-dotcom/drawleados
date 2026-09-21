@@ -173,6 +173,27 @@ async def guard_ad_task(db, task: dict, kind: str) -> None:
             raise HTTPException(status_code=400, detail=blocked_message(blockers))
 
 
+async def annotate_ad_blocked(db, tasks: List[dict]) -> None:
+    """Sets `ad_blocked_message` on open ad tasks that are still waiting on an
+    earlier step, so My Tasks can disable their timer instead of letting the
+    click fail. One batched project lookup for the whole list; tasks whose ad
+    has been removed are left unflagged (same as the guard)."""
+    open_ad_tasks = [t for t in tasks if t.get("ad_field") and t.get("status") != "completed"]
+    if not open_ad_tasks:
+        return
+    project_ids = list({t["project_id"] for t in open_ad_tasks if t.get("project_id")})
+    projects: Dict[str, dict] = {}
+    async for p in db.projects.find({"project_id": {"$in": project_ids}}, {"_id": 0, "project_id": 1, "campaigns": 1}):
+        projects[p["project_id"]] = p
+    for t in open_ad_tasks:
+        _, _, ad = find_ad(projects.get(t.get("project_id")), t.get("ad_campaign_id"), t.get("ad_set_id"), t.get("ad_id"))
+        if not ad:
+            continue
+        blockers = blockers_for(ad, t["ad_field"])
+        if blockers:
+            t["ad_blocked_message"] = blocked_message(blockers)
+
+
 # ----------------------------------------------------------------- endpoints
 
 @ad_tasks_router.get("/tasks/{task_id}/context")
