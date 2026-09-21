@@ -2269,7 +2269,7 @@ export default function ProjectsPanel({
         {projectInnerTab === 'reports' && (selectedProject.departments || []).includes('meta') && (
           <ProjectMetaReportsTab
             project={selectedProject}
-            canEdit={canManageProjects}
+            canEdit={canManageContentCalendar}
             users={users}
             headers={headers}
             bgCard={bgCard}

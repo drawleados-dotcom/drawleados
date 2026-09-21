@@ -202,6 +202,7 @@ export default function ProjectMetaReportsTab({
           const meta = STATUS[st];
           const asg = day?.assignment;
           const done = st === 'submitted' || st === 'legacy';
+          const viewing = done || !canEdit;
           const future = date > today;
           const cov = day?.coverage;
           const campChips = cov ? cov.campaigns.filter(c => c.ads_total > 0) : [];
@@ -235,12 +236,12 @@ export default function ProjectMetaReportsTab({
                       type="button"
                       size="sm"
                       onClick={() => setReportDay(date)}
-                      disabled={future && !done}
-                      className={done ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white'}
-                      title={future && !done ? "A future day can't be reported yet" : done ? 'View the submitted report' : "Fill in this day's report"}
+                      disabled={future && !viewing}
+                      className={viewing ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white'}
+                      title={future && !viewing ? "A future day can't be reported yet" : done ? 'View the submitted report' : !canEdit ? 'View this day (you have view-only access)' : "Fill in this day's report"}
                       data-testid={`meta-report-open-${date}`}
                     >
-                      {done ? <><Eye className="h-3.5 w-3.5 mr-1" /> View Report</> : <><BarChart3 className="h-3.5 w-3.5 mr-1" /> Report</>}
+                      {viewing ? <><Eye className="h-3.5 w-3.5 mr-1" /> View Report</> : <><BarChart3 className="h-3.5 w-3.5 mr-1" /> Report</>}
                     </Button>
                   </div>
                 </div>

@@ -41,7 +41,7 @@ function AdThumb({ ad, headersRef, borderColor, textSecondary }) {
 const sel = (bgSecondary, borderColor, textPrimary) => `w-full h-9 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 text-sm disabled:opacity-50`;
 
 /** The Ads sub-popup: one row per ad of the ad set — creative, name, leads, spend, CPL — auto-saved. */
-function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDetail, onClose, theme }) {
+function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDetail, onClose, theme, canEdit }) {
   const { bgCard, bgSecondary, textPrimary, textSecondary, borderColor } = theme;
   const [values, setValues] = useState(() => Object.fromEntries((adSet.ads || []).map(ad => {
     const e = saved.find(x => x.ad_id === ad.id);
@@ -112,6 +112,7 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
 
   const finish = async (saveClicked) => {
     clearTimeout(timerRef.current);
+    if (!canEdit) { onClose(true); return; }
     if (invalid) { toast.error('Enter leads and spend as numbers of 0 or more'); return; }
     let ok = true;
     if (dirtyRef.current || saveClicked) ok = await enqueue();
@@ -160,10 +161,10 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
                     <span className={`block text-[10px] font-normal capitalize ${textSecondary}`}>{ad.ad_type}</span>
                   </td>
                   <td className="px-3 py-2">
-                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].leads} onChange={(e) => setVal(ad.id, 'leads', e.target.value)} className={inputCls} placeholder="0" data-testid={`meta-report-leads-${ad.id}`} />
+                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].leads} onChange={(e) => setVal(ad.id, 'leads', e.target.value)} disabled={!canEdit} className={`${inputCls} disabled:opacity-70`} placeholder="0" data-testid={`meta-report-leads-${ad.id}`} />
                   </td>
                   <td className="px-3 py-2">
-                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].spend} onChange={(e) => setVal(ad.id, 'spend', e.target.value)} className={inputCls} placeholder="0" data-testid={`meta-report-spend-${ad.id}`} />
+                    <input type="number" min="0" step="any" inputMode="decimal" value={values[ad.id].spend} onChange={(e) => setVal(ad.id, 'spend', e.target.value)} disabled={!canEdit} className={`${inputCls} disabled:opacity-70`} placeholder="0" data-testid={`meta-report-spend-${ad.id}`} />
                   </td>
                   <td className={`px-3 py-2 text-sm text-right tabular-nums ${textPrimary}`}>{cplText(values[ad.id].spend, values[ad.id].leads)}</td>
                 </tr>
@@ -182,9 +183,9 @@ function AdsSubPopup({ projectId, date, campaign, adSet, saved, headersRef, onDe
 
         <div className={`p-4 border-t ${borderColor} flex items-center justify-between gap-3`}>
           <span className={`text-xs ${status === 'error' || invalid ? 'text-red-500' : textSecondary}`} data-testid="meta-report-autosave-status">
-            {invalid ? 'Enter numbers of 0 or more' : status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ All changes saved' : status === 'error' ? 'Could not save — try again' : 'Changes save automatically'}
+            {!canEdit ? 'View only' : invalid ? 'Enter numbers of 0 or more' : status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ All changes saved' : status === 'error' ? 'Could not save — try again' : 'Changes save automatically'}
           </span>
-          <Button type="button" onClick={() => finish(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="meta-report-ads-save">Save</Button>
+          <Button type="button" onClick={() => finish(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="meta-report-ads-save">{canEdit ? 'Save' : 'Close'}</Button>
         </div>
       </div>
     </div>
@@ -377,6 +378,10 @@ export default function MetaDayReportPopup({
                 </div>
               </div>
 
+              {!canEdit && (
+                <p className="text-xs text-amber-500" data-testid="meta-report-viewonly-note">You have view-only access to project reports, so the numbers can't be changed here.</p>
+              )}
+
               {cov.ads_total === 0 ? (
                 <p className={`text-sm ${textSecondary} text-center py-6`}>This project had no ads on this day, so there is nothing to report.</p>
               ) : (
@@ -418,7 +423,7 @@ export default function MetaDayReportPopup({
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={!set || !canEdit}
+                          disabled={!set}
                           onClick={() => setAdsRowKey(r.key)}
                           className={cs?.complete ? 'border-[#10b981]/50 text-[#10b981]' : ''}
                           data-testid={`meta-report-open-ads-${r.key}`}
@@ -486,6 +491,7 @@ export default function MetaDayReportPopup({
           headersRef={headersRef}
           onDetail={onDetail}
           theme={theme}
+          canEdit={canEdit}
           onClose={() => {
             setAdsRowKey(null);
             axios.get(`${API}/api/meta-reports/daily/${projectId}/${date}`, { headers: headersRef.current })
