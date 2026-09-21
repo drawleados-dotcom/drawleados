@@ -77,6 +77,27 @@ const statusColors = {
   'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]'
 };
 
+// Start of the open session while a timer is running (else null).
+const runningSince = (tracking) => {
+  if (tracking?.status !== 'running') return null;
+  const sessions = tracking.sessions || [];
+  const last = sessions[sessions.length - 1];
+  return last && last.start && !last.end ? last.start : null;
+};
+
+// Duration that keeps counting up by itself while `since` is set. It ticks in
+// its own state so only this text re-renders, not the whole task list.
+const LiveSeconds = ({ base = 0, since = null, format }) => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!since) return undefined;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  const elapsed = since ? Math.floor((Date.now() - new Date(since).getTime()) / 1000) : 0;
+  return <>{format(Number(base || 0) + (elapsed > 0 ? elapsed : 0))}</>;
+};
+
 export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_to_me' }) {
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -1149,7 +1170,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       if (status === 'running' || status === 'paused') {
         return (
           <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
-            <Timer className="h-3 w-3 mr-1" /> {formatDuration(tracking.total_seconds || 0)}
+            <Timer className="h-3 w-3 mr-1" />{' '}
+            <LiveSeconds base={tracking.total_seconds} since={runningSince(tracking)} format={formatDuration} />
           </Badge>
         );
       }
@@ -2915,7 +2937,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         <div className="flex items-center gap-1 whitespace-nowrap">
                           <Timer className={`h-3.5 w-3.5 flex-shrink-0 ${task.time_tracking?.status === 'running' ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
                           <span className={`text-xs font-medium ${textPrimary}`}>
-                            {formatDuration(task.time_tracking?.total_seconds || 0)}
+                            <LiveSeconds
+                              base={task.time_tracking?.total_seconds}
+                              since={runningSince(task.time_tracking)}
+                              format={formatDuration}
+                            />
                           </span>
                         </div>
                         {task.time_tracking?.status === 'running' && (
@@ -4256,8 +4282,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   <div className={`p-4 rounded-lg ${bgSecondary}`}>
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>
-                          {formatDuration(viewingTask.time_tracking?.total_seconds || 0)}
+                        <p className={`text-2xl font-bold ${textPrimary}`} data-testid="task-detail-total-time">
+                          <LiveSeconds
+                            base={viewingTask.time_tracking?.total_seconds}
+                            since={runningSince(viewingTask.time_tracking)}
+                            format={formatDuration}
+                          />
                         </p>
                         <p className={`text-xs ${textSecondary}`}>Total Time Spent</p>
                       </div>
@@ -4296,7 +4326,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 {new Date(session.start).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                               </span>
                               <span className="font-medium text-[#6366f1]">
-                                {formatDuration(session.duration_seconds)}
+                                <LiveSeconds
+                                  base={session.duration_seconds}
+                                  since={!session.end && viewingTask.time_tracking?.status === 'running' ? session.start : null}
+                                  format={formatDuration}
+                                />
                               </span>
                             </div>
                           ))}
