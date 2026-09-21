@@ -445,3 +445,354 @@ async def delete_recharge(recharge_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Recharge not found")
     return {"ok": True}
 
+
+# ------------------------------------------------------------ day-wise reports
+# The Reports tab is a calendar of days. A day's report is ONE document per
+# (project, date) with kind="daily": one entry per ad (leads + spend), saved
+# ad set by ad set as the reporter types. Older reports (campaign-level entries
+# from the original popup) keep working — they have no kind — and simply add to
+# that day's totals. A day is "submitted" once every ad that existed on it has
+# numbers; if a report task was assigned for the day, that task then completes.
+
+DAILY = "daily"
+
+
+class AdReportRow(BaseModel):
+    ad_id: str
+    leads: Optional[float] = None
+    spend: Optional[float] = None
+
+
+class DailySave(BaseModel):
+    campaign_id: str
+    ad_set_id: str
+    rows: List[AdReportRow]
+
+
+class DailyAssign(BaseModel):
+    assigned_to: str
+    due_date: Optional[str] = None  # defaults to the day after the report day
+
+
+def _today_ist() -> str:
+    return datetime.now(IST).date().isoformat()
+
+
+def _next_day(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+
+
+def _ad_due_on(ad: dict, day: str) -> bool:
+    """An ad has to be reported on `day` unless it was only created afterwards."""
+    created = (ad.get("created_at") or "")[:10]
+    return not created or created <= day
+
+
+async def _load_meta_project(user, db, project_id: str) -> dict:
+    project = await db.projects.find_one(
+        {"project_id": project_id, "departments": "meta", **(await _visible_projects_query(user, db))},
+        {"_id": 0, "project_id": 1, "name": 1, "status": 1, "campaigns": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _coverage(project: dict, entries: list, day: str) -> dict:
+    reported = {e["ad_id"]: e for e in entries if e.get("ad_id")}
+    campaigns, ads_total, ads_reported, camps_total, camps_done = [], 0, 0, 0, 0
+    for c in project.get("campaigns") or []:
+        c_total = c_rep = 0
+        ad_sets = []
+        for a in c.get("ad_sets") or []:
+            ids = [ad["id"] for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(ad, day)]
+            rep = [i for i in ids if i in reported]
+            if ids:
+                ad_sets.append({"id": a.get("id"), "name": a.get("name") or "", "ads_total": len(ids),
+                                "ads_reported": len(rep), "complete": len(rep) == len(ids)})
+            c_total += len(ids)
+            c_rep += len(rep)
+        mine = [e for e in entries if e.get("campaign_id") == c.get("id")]
+        if c_total:
+            camps_total += 1
+            camps_done += 1 if c_rep == c_total else 0
+        campaigns.append({
+            "id": c.get("id"), "name": c.get("name") or "", "ads_total": c_total, "ads_reported": c_rep,
+            "complete": c_total > 0 and c_rep == c_total, "ad_sets": ad_sets,
+            "leads": round(sum(_num(e.get("total_leads")) for e in mine), 2),
+            "spend": round(sum(_num(e.get("total_spend")) for e in mine), 2),
+        })
+        ads_total += c_total
+        ads_reported += c_rep
+    return {
+        "campaigns": campaigns, "campaigns_total": camps_total, "campaigns_complete": camps_done,
+        "ads_total": ads_total, "ads_reported": ads_reported,
+        "complete": camps_total > 0 and camps_done == camps_total,
+    }
+
+
+def _day_summary(project: dict, day: str, docs: list, task: Optional[dict]) -> dict:
+    daily = next((d for d in docs if d.get("kind") == DAILY), None)
+    legacy = [d for d in docs if d.get("kind") != DAILY]
+    entries = (daily or {}).get("entries") or []
+    all_entries = entries + [e for d in legacy for e in (d.get("entries") or [])]
+    leads = sum(_num(e.get("total_leads")) for e in all_entries)
+    spend = sum(_num(e.get("total_spend")) for e in all_entries)
+    cov = _coverage(project, entries, day)
+    if cov["complete"]:
+        status = "submitted"
+    elif entries:
+        status = "partial"
+    elif legacy:
+        status = "legacy"
+    elif daily and daily.get("assigned_to"):
+        status = "assigned"
+    else:
+        status = "pending"
+    assignment = None
+    if daily and daily.get("assigned_to"):
+        assignment = {
+            "task_id": daily.get("task_id"), "assigned_to": daily.get("assigned_to"),
+            "assigned_to_name": daily.get("assigned_to_name") or "", "due_date": daily.get("due_date"),
+            "task_status": (task or {}).get("status") or ("completed" if daily.get("assign_status") == "completed" else "pending"),
+        }
+    return {
+        "date": day, "status": status, "leads": round(leads, 2), "spend": round(spend, 2), "cpl": _cpl(spend, leads),
+        "legacy": bool(legacy), "coverage": cov, "assignment": assignment,
+    }
+
+
+@meta_reports_router.get("/daily/{project_id}")
+async def list_daily_reports(
+    project_id: str,
+    request: Request,
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+):
+    """Every day in the range that has a report or an assignment."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    project = await _load_meta_project(user, db, project_id)
+    start = _clean_date(from_date, "from")
+    end = _clean_date(to_date, "to")
+    if start and end and start > end:
+        raise HTTPException(status_code=400, detail="from must not be after to")
+    docs = await db.meta_ads_reports.find({"project_id": project_id}, {"_id": 0}).to_list(20000)
+    by_day: dict = {}
+    for d in docs:
+        day = (d.get("date") or "")[:10]
+        if day and ((not start and not end) or _in_range(day, start, end)):
+            by_day.setdefault(day, []).append(d)
+    task_ids = [d.get("task_id") for ds in by_day.values() for d in ds if d.get("task_id")]
+    tasks = {}
+    if task_ids:
+        async for t in db.our_tasks.find({"task_id": {"$in": task_ids}}, {"_id": 0, "task_id": 1, "status": 1}):
+            tasks[t["task_id"]] = t
+    days = []
+    for day in sorted(by_day, reverse=True):
+        daily = next((d for d in by_day[day] if d.get("kind") == DAILY), None)
+        days.append(_day_summary(project, day, by_day[day], tasks.get((daily or {}).get("task_id"))))
+    return {
+        "days": days,
+        "structure": {
+            "campaigns": len(project.get("campaigns") or []),
+            "ad_sets": sum(len(c.get("ad_sets") or []) for c in project.get("campaigns") or []),
+            "ads": sum(len(a.get("ads") or []) for c in project.get("campaigns") or [] for a in c.get("ad_sets") or []),
+        },
+    }
+
+
+async def _day_detail(db, project: dict, day: str) -> dict:
+    docs = await db.meta_ads_reports.find({"project_id": project["project_id"], "date": day}, {"_id": 0}).to_list(200)
+    daily = next((d for d in docs if d.get("kind") == DAILY), None)
+    task = await db.our_tasks.find_one({"task_id": daily["task_id"]}, {"_id": 0, "status": 1}) if daily and daily.get("task_id") else None
+    summary = _day_summary(project, day, docs, task)
+    structure = []
+    for c in project.get("campaigns") or []:
+        ad_sets = []
+        for a in c.get("ad_sets") or []:
+            ads = [
+                {"id": ad.get("id"), "name": ad.get("name") or "", "ad_type": ad.get("ad_type") or "static",
+                 "creative_link": ad.get("creative_link") or "",
+                 "creative_file_id": ad.get("creative_file_id"), "editing_file_id": ad.get("editing_file_id")}
+                for ad in (a.get("ads") or []) if ad.get("id") and _ad_due_on(ad, day)
+            ]
+            ad_sets.append({"id": a.get("id"), "name": a.get("name") or "", "ads": ads})
+        structure.append({"id": c.get("id"), "name": c.get("name") or "", "ad_sets": ad_sets})
+    legacy_entries = [
+        {**e, "submitted_by_name": d.get("submitted_by_name")}
+        for d in docs if d.get("kind") != DAILY for e in (d.get("entries") or [])
+    ]
+    return {
+        **summary,
+        "project": {"project_id": project["project_id"], "name": project.get("name") or ""},
+        "structure": structure,
+        "entries": (daily or {}).get("entries") or [],
+        "legacy_entries": legacy_entries,
+    }
+
+
+@meta_reports_router.get("/daily/{project_id}/{day}")
+async def get_daily_report(project_id: str, day: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    project = await _load_meta_project(user, db, project_id)
+    day = _clean_date(day, "date")
+    if not day:
+        raise HTTPException(status_code=400, detail="date is required")
+    return await _day_detail(db, project, day)
+
+
+async def _complete_assigned_task(db, doc: dict) -> None:
+    """The day is fully reported: finish its assigned report task, if any."""
+    task_id = doc.get("task_id")
+    if not task_id:
+        return
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task or task.get("status") == "completed":
+        return
+    from ad_tasks_routes import close_timer
+    now = datetime.now(timezone.utc)
+    await db.our_tasks.update_one({"task_id": task_id}, {"$set": {
+        "status": "completed", "reference_image": None,
+        "time_tracking": close_timer(task.get("time_tracking"), now), "updated_at": now.isoformat(),
+    }})
+    await db.meta_ads_reports.update_one({"report_id": doc["report_id"]}, {"$set": {"assign_status": "completed"}})
+
+
+@meta_reports_router.put("/daily/{project_id}/{day}")
+async def save_daily_report(project_id: str, day: str, payload: DailySave, request: Request):
+    """Save one ad set's numbers for the day (replaces what was saved for that
+    ad set). Blank rows are dropped, so clearing the fields un-reports the ad."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    project = await _load_meta_project(user, db, project_id)
+    day = _clean_date(day, "date")
+    if not day:
+        raise HTTPException(status_code=400, detail="date is required")
+    if day > _today_ist():
+        raise HTTPException(status_code=400, detail="A report can't be filed for a future day")
+
+    campaign = next((c for c in project.get("campaigns") or [] if c.get("id") == payload.campaign_id), None)
+    ad_set = next((a for a in (campaign or {}).get("ad_sets") or [] if a.get("id") == payload.ad_set_id), None)
+    if not ad_set:
+        raise HTTPException(status_code=404, detail="Campaign or ad set not found")
+    ads = {ad["id"]: ad for ad in (ad_set.get("ads") or []) if ad.get("id")}
+
+    entries, seen = [], set()
+    for row in payload.rows:
+        if row.ad_id not in ads:
+            raise HTTPException(status_code=400, detail="That ad isn't in this ad set")
+        if row.ad_id in seen:
+            raise HTTPException(status_code=400, detail="An ad was sent twice")
+        seen.add(row.ad_id)
+        if row.leads is None and row.spend is None:
+            continue
+        leads, spend = row.leads if row.leads is not None else 0.0, row.spend if row.spend is not None else 0.0
+        if not (math.isfinite(leads) and math.isfinite(spend)) or leads < 0 or spend < 0:
+            raise HTTPException(status_code=400, detail="Leads and spend must be numbers of 0 or more")
+        entries.append({
+            "campaign_id": campaign["id"], "campaign_name": campaign.get("name") or "",
+            "ad_set_id": ad_set["id"], "ad_set_name": ad_set.get("name") or "",
+            "ad_id": row.ad_id, "ad_name": ads[row.ad_id].get("name") or "",
+            "total_leads": round(leads, 2), "total_spend": round(spend, 2),
+            "cost_per_lead": _cpl(spend, leads) or 0,
+        })
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    key = {"project_id": project_id, "date": day, "kind": DAILY}
+    await db.meta_ads_reports.update_one(key, {"$setOnInsert": {
+        "report_id": f"mrpt_{uuid.uuid4().hex[:10]}", "entries": [], "created_at": now_iso,
+    }}, upsert=True)
+    await db.meta_ads_reports.update_one(key, {"$pull": {"entries": {"ad_set_id": ad_set["id"]}}})
+    update = {"$set": {"updated_at": now_iso, "submitted_by": user.user_id, "submitted_by_name": getattr(user, "name", "") or "",
+                       "submitted_at": now_iso}}
+    if entries:
+        update["$push"] = {"entries": {"$each": entries}}
+    await db.meta_ads_reports.update_one(key, update)
+
+    detail = await _day_detail(db, project, day)
+    if detail["coverage"]["complete"]:
+        doc = await db.meta_ads_reports.find_one(key, {"_id": 0})
+        await _complete_assigned_task(db, doc)
+        detail = await _day_detail(db, project, day)
+    return detail
+
+
+@meta_reports_router.post("/daily/{project_id}/{day}/assign")
+async def assign_daily_report(project_id: str, day: str, payload: DailyAssign, request: Request):
+    """Hand the day's report to someone. Creates (or re-points) a My Tasks task
+    due the day after the report day unless another deadline is given."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    from projects_routes import _is_operation_head_or_admin
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can assign reports")
+    project = await _load_meta_project(user, db, project_id)
+    day = _clean_date(day, "date")
+    if not day:
+        raise HTTPException(status_code=400, detail="date is required")
+    due = _clean_date(payload.due_date, "due_date") or _next_day(day)
+    assignee = await db.users.find_one({"user_id": payload.assigned_to}, {"_id": 0, "user_id": 1, "name": 1})
+    if not assignee:
+        raise HTTPException(status_code=400, detail="Choose who should file this report")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    key = {"project_id": project_id, "date": day, "kind": DAILY}
+    await db.meta_ads_reports.update_one(key, {"$setOnInsert": {
+        "report_id": f"mrpt_{uuid.uuid4().hex[:10]}", "entries": [], "created_at": now_iso,
+    }}, upsert=True)
+    doc = await db.meta_ads_reports.find_one(key, {"_id": 0})
+    task = await db.our_tasks.find_one({"task_id": doc["task_id"]}) if doc.get("task_id") else None
+    if task and task.get("status") != "completed":
+        await db.our_tasks.update_one({"task_id": task["task_id"]}, {"$set": {
+            "assigned_to": assignee["user_id"], "due_date": due, "updated_at": now_iso,
+        }})
+        task_id = task["task_id"]
+    else:
+        task_id = f"ot_{uuid.uuid4().hex[:12]}"
+        await db.our_tasks.insert_one({
+            "task_id": task_id,
+            "task_name": f"Meta Ads Report — {project.get('name') or ''} — {date.fromisoformat(day).strftime('%d %b %Y')}",
+            "description": f"Report leads and spend for every ad for {date.fromisoformat(day).strftime('%d %b %Y')}.",
+            "status": "pending", "priority": "medium", "type": "general", "tags": [],
+            "assigned_to": assignee["user_id"], "created_by": user.user_id, "created_by_name": getattr(user, "name", "") or "",
+            "due_date": due, "work_link": None, "department": "meta", "category": "Report",
+            "project_id": project_id, "project_name": project.get("name"), "meta_report_date": day,
+            "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
+            "created_at": now_iso, "updated_at": now_iso,
+        })
+    await db.meta_ads_reports.update_one(key, {"$set": {
+        "task_id": task_id, "assigned_to": assignee["user_id"], "assigned_to_name": assignee.get("name") or "",
+        "assigned_by": user.user_id, "assigned_by_name": getattr(user, "name", "") or "",
+        "due_date": due, "assign_status": "assigned", "updated_at": now_iso,
+    }})
+    await db.projects.update_one({"project_id": project_id}, {"$addToSet": {"members": assignee["user_id"]}})
+    return await _day_detail(db, project, day)
+
+
+@meta_reports_router.delete("/daily/{project_id}/{day}/assign")
+async def unassign_daily_report(project_id: str, day: str, request: Request):
+    """Take the report back — only while its task hasn't been touched."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    from projects_routes import _is_operation_head_or_admin
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can assign reports")
+    project = await _load_meta_project(user, db, project_id)
+    day = _clean_date(day, "date")
+    key = {"project_id": project_id, "date": day, "kind": DAILY}
+    doc = await db.meta_ads_reports.find_one(key, {"_id": 0})
+    if not doc or not doc.get("assigned_to"):
+        raise HTTPException(status_code=404, detail="This day has no assignment")
+    task = await db.our_tasks.find_one({"task_id": doc.get("task_id")}) if doc.get("task_id") else None
+    if task and (task.get("status") != "pending" or (task.get("time_tracking") or {}).get("status") not in (None, "not_started")):
+        raise HTTPException(status_code=400, detail="The assignee has already started this task")
+    if task:
+        await db.our_tasks.delete_one({"task_id": task["task_id"]})
+    await db.meta_ads_reports.update_one(key, {"$unset": {
+        "task_id": "", "assigned_to": "", "assigned_to_name": "", "assigned_by": "", "assigned_by_name": "",
+        "due_date": "", "assign_status": "",
+    }})
+    return await _day_detail(db, project, day)
+

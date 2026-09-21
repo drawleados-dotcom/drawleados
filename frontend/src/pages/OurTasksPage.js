@@ -30,6 +30,7 @@ import OperationsSummaryCards from '../components/operations/OperationsSummaryCa
 import OperationsTabsBar from '../components/operations/OperationsTabsBar';
 import CalendarTaskPanel from '../components/operations/CalendarTaskPanel';
 import AdTaskPanel from '../components/operations/AdTaskPanel';
+import MetaDayReportPopup from '../components/projects/MetaDayReportPopup';
 import { buildErpPrompt } from '../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
 
@@ -177,6 +178,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   // Meta Ads daily "Submit Report" popup — task currently being reported on
   const [reportTask, setReportTask] = useState(null);
+  // Meta Ads day report assigned from the project's Reports tab (task.meta_report_date)
+  const [metaDayReport, setMetaDayReport] = useState(null);
   const [reportProject, setReportProject] = useState(null); // freshly-fetched project (for its campaigns list)
   const [reportDate, setReportDate] = useState('');
   const [reportRows, setReportRows] = useState([]);
@@ -516,8 +519,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // leads (Assign to Team access) rather than the assignee's own My Tasks —
   // doesn't apply to the creator viewing their own created tasks.
   const isHiddenProjectTaskForAssignee = useCallback((task) => {
-    // Content Calendar and Meta Ads ad deliverables exist to be done by their assignee.
-    if (task.content_calendar_field || task.ad_field) return false;
+    // Content Calendar, Meta Ads ad deliverables and assigned Meta day reports exist to be done by their assignee.
+    if (task.content_calendar_field || task.ad_field || task.meta_report_date) return false;
     if (task.assigned_to !== user?.user_id || task.created_by === user?.user_id) return false;
     if (!task.project_id) return false;
     const creatorRole = (usersById[task.created_by]?.role || '').toLowerCase();
@@ -2817,6 +2820,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               <CalendarDays className="h-3 w-3 mr-1" />Social Media · {({ content_link: 'Content Link', creative_link: 'Creative Link', editing_link: 'Editing', thumbnail_link: 'Thumbnail', posting: 'Posting', post_report: 'Post Report' })[task.content_calendar_field] || 'Link'}
                             </Badge>
                           )}
+                          {task.meta_report_date && (
+                            <Badge className="text-xs bg-[#8b5cf6]/20 text-[#8b5cf6]" data-testid={`meta-report-task-badge-${task.task_id}`}>
+                              <BarChart3 className="h-3 w-3 mr-1" />Meta Ads · Daily Report
+                            </Badge>
+                          )}
                           {task.ad_field && (
                             <Badge className="text-xs bg-[#3b82f6]/20 text-[#3b82f6]" data-testid={`ad-task-badge-${task.task_id}`}>
                               <Megaphone className="h-3 w-3 mr-1" />Meta Ads · {({ content: 'Content', creative: 'Creative', editing: 'Editing', setup: 'Ad Setup' })[task.ad_field] || 'Ad'}
@@ -3149,9 +3157,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <Button
                               size="sm"
                               className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white h-8 px-3"
-                              onClick={(e) => { e.stopPropagation(); openReportModal(task); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (task.meta_report_date) setMetaDayReport({ projectId: task.project_id, date: task.meta_report_date });
+                                else openReportModal(task);
+                              }}
                               data-testid={`submit-report-btn-${task.task_id}`}
-                              title="Submit today's campaign report"
+                              title={task.meta_report_date ? 'Open the project report for that day' : "Submit today's campaign report"}
                             >
                               <BarChart3 className="h-3 w-3 mr-1" /> Submit Report
                             </Button>
@@ -4479,6 +4491,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </div>
             </Card>
           </div>
+        )}
+
+        {/* Assigned Meta Ads day report — the same popup as the project's Reports tab */}
+        {metaDayReport && (
+          <MetaDayReportPopup
+            projectId={metaDayReport.projectId}
+            date={metaDayReport.date}
+            headers={headers}
+            canEdit
+            onClose={() => setMetaDayReport(null)}
+            onChanged={loadTasks}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {/* Meta Ads daily "Submit Report" popup */}

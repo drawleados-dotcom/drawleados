@@ -28,6 +28,7 @@ import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectAdsTab from './projects/ProjectAdsTab';
 import ProjectPaymentHistoryTab from './projects/ProjectPaymentHistoryTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
+import ProjectCampaignReportsTab from './projects/ProjectCampaignReportsTab';
 import ProjectDailyOptimizationTab from './projects/ProjectDailyOptimizationTab';
 import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
 import MetaPerformanceView from './projects/MetaPerformanceView';
@@ -2265,8 +2266,21 @@ export default function ProjectsPanel({
           />
         )}
 
-        {projectInnerTab === 'reports' && (
+        {projectInnerTab === 'reports' && (selectedProject.departments || []).includes('meta') && (
           <ProjectMetaReportsTab
+            project={selectedProject}
+            canEdit={canManageProjects}
+            users={users}
+            headers={headers}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+        {projectInnerTab === 'reports' && !(selectedProject.departments || []).includes('meta') && (
+          <ProjectCampaignReportsTab
             project={selectedProject}
             isDark={isDark}
             bgCard={bgCard}
