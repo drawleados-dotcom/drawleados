@@ -413,8 +413,11 @@ export default function ProjectAdsTab({
         </CardContent>
       </Card>
 
+      {/* z-40, not z-[70]: the Assign-to <Select> list portals to document.body
+          at z-50 (ui/select.jsx), so a higher z-index here puts this popup's
+          backdrop on top of the open list. */}
       {workModal && workRow && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => setWorkModal(null)}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={() => setWorkModal(null)}>
           <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <div>
