@@ -1035,12 +1035,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
   const openEditTimeModal = (task) => {
     const { start, end } = getTaskStartEnd(task);
-    const sParts = splitHM(toTimeInputValue(start));
-    const eParts = splitHM(toTimeInputValue(end));
+    const sessions = task?.time_tracking?.sessions || [];
+    const wasRunning = task?.time_tracking?.status === 'running' && sessions.length > 0 && !sessions[sessions.length - 1].end;
+    // "Till now" (timer runs from the start time, no end) fits a task that
+    // hasn't started or is running; a stopped task needs a real end time.
+    const canTillNow = sessions.length === 0 || wasRunning;
+    // No recorded time yet → open on the current time, not a made-up 9:00 AM.
+    const nowHM = toTimeInputValue(new Date().toISOString());
+    const sParts = splitHM(start ? toTimeInputValue(start) : nowHM);
+    const eParts = splitHM(end ? toTimeInputValue(end) : nowHM);
     setEditTimeModal({
       task,
       sH: sParts.h, sM: sParts.m, sP: sParts.p,
       eH: eParts.h, eM: eParts.m, eP: eParts.p,
+      canTillNow,
+      tillNow: canTillNow,
+      wasRunning,
     });
   };
 
@@ -1057,7 +1067,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       const { start, end } = getTaskStartEnd(task);
       const anchorIso = start || end;
       const payload = {};
-      const baseDate = anchorIso ? anchorIso.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      // Calendar date in the user's own timezone (an ISO string's date is UTC,
+      // which is the previous day for early-morning IST times).
+      const localYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const baseDate = localYmd(anchorIso ? new Date(anchorIso) : new Date());
       payload.date = baseDate;
 
       // Convert HH:MM (local time) → ISO UTC string so backend stores the correct instant.
@@ -1072,10 +1085,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       };
 
       if (draft.start) payload.start_time = localHmToIso(draft.start);
-      if (draft.end) payload.end_time = localHmToIso(draft.end);
+      if (draft.tillNow) {
+        // Start-only: the timer runs from this time until it's paused / finished.
+        if (!draft.start) {
+          toast.error('Choose the start time first');
+          return;
+        }
+        if (new Date(payload.start_time).getTime() > Date.now() + 60000) {
+          toast.error("Start time can't be in the future");
+          return;
+        }
+        payload.till_now = true;
+      } else if (draft.end) {
+        payload.end_time = localHmToIso(draft.end);
+      }
 
       // Block save if the task interval overlaps a recorded break on the same date.
-      if (draft.start && draft.end) {
+      if (draft.start && draft.end && !draft.tillNow) {
         const conflict = findBreakConflict(payload.date, draft.start, draft.end);
         if (conflict) {
           setBreakConflictModal({
@@ -1089,7 +1115,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       }
 
       await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/time-edit`, payload, { headers });
-      toast.success('Time saved');
+      toast.success(payload.till_now ? 'Timer running from the start time' : 'Time saved');
       setEditingTimeRow(null);
       setEditTimeModal(null);
       setTimeDrafts(prev => {
@@ -4785,7 +4811,34 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                 {/* End Time */}
                 <div>
-                  <Label className="text-xs text-[#a1a1aa] uppercase tracking-wide">End Time</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-[#a1a1aa] uppercase tracking-wide">
+                      End Time{editTimeModal.canTillNow ? ' (optional)' : ''}
+                    </Label>
+                    {editTimeModal.canTillNow && (
+                      <button
+                        type="button"
+                        aria-pressed={!!editTimeModal.tillNow}
+                        onClick={() => setEditTimeModal((m) => ({ ...m, tillNow: !m.tillNow }))}
+                        className={`px-3 py-1 text-xs rounded-full border flex items-center gap-1 ${
+                          editTimeModal.tillNow
+                            ? 'bg-[#10b981] border-[#10b981] text-white'
+                            : 'bg-[#27272a] border-[#3f3f46] text-[#a1a1aa] hover:text-[#fafafa]'
+                        }`}
+                        data-testid="edit-time-till-now"
+                      >
+                        <Timer className="h-3 w-3" /> Till now
+                      </button>
+                    )}
+                  </div>
+                  {editTimeModal.canTillNow && editTimeModal.tillNow ? (
+                    <p
+                      className="mt-2 text-sm text-[#a1a1aa] rounded-lg bg-[#27272a] border border-[#3f3f46] px-3 py-3"
+                      data-testid="edit-time-till-now-note"
+                    >
+                      The timer runs from the start time until you pause, stop or complete the task. You can also set the end time by hand later.
+                    </p>
+                  ) : (
                   <div className="mt-2 flex items-center gap-2">
                     <input
                       type="number"
@@ -4824,6 +4877,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       ))}
                     </div>
                   </div>
+                  )}
                 </div>
 
                 <p className="text-xs text-[#71717a]">
@@ -4842,16 +4896,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 </Button>
                 <Button
                   onClick={() => {
+                    const tillNow = !!(editTimeModal.canTillNow && editTimeModal.tillNow);
                     const draft = {
                       start: joinHM({ h: editTimeModal.sH, m: editTimeModal.sM, p: editTimeModal.sP }),
-                      end: joinHM({ h: editTimeModal.eH, m: editTimeModal.eM, p: editTimeModal.eP }),
+                      end: tillNow ? null : joinHM({ h: editTimeModal.eH, m: editTimeModal.eM, p: editTimeModal.eP }),
+                      tillNow,
                     };
                     handleSaveTimeRow(editTimeModal.task.task_id, draft);
                   }}
                   className="bg-[#10b981] hover:bg-[#059669] text-white"
                   data-testid="edit-time-save"
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> Save
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  {editTimeModal.canTillNow && editTimeModal.tillNow && !editTimeModal.wasRunning ? 'Save & Start Timer' : 'Save'}
                 </Button>
               </div>
             </div>

@@ -128,6 +128,7 @@ class TimeEditPayload(BaseModel):
     start_time: Optional[str] = None  # "HH:MM" or full ISO
     end_time: Optional[str] = None    # "HH:MM" or full ISO
     date: Optional[str] = None        # "YYYY-MM-DD" — defaults to today
+    till_now: bool = False            # run the timer from start_time until the user stops it
 
 class ApprovalRequestPayload(BaseModel):
     approver_role: str  # 'operations' | 'pm' | 'ceo' | 'marketing_head' | 'hr'
@@ -1289,13 +1290,44 @@ async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Re
 
     time_tracking = task.get("time_tracking") or {"total_seconds": 0, "status": "not_started", "sessions": []}
     sessions = time_tracking.get("sessions", [])
+    now = datetime.now(timezone.utc)
+
+    def parse_dt(value: str) -> datetime:
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid time: {value}")
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    # A running timer is one whose last session is still open.
+    was_running = bool(sessions) and time_tracking.get("status") == "running" and not sessions[-1].get("end")
+    closes_running = was_running and bool(new_end_iso) and not payload.till_now
+    started_now = False
+
+    # "Till now": the timer runs from the given start time until the user
+    # pauses / finishes it (or later sets an end time by hand).
+    if payload.till_now:
+        if new_end_iso:
+            raise HTTPException(status_code=400, detail="Choose either an end time or Till now, not both")
+        if not new_start_iso:
+            raise HTTPException(status_code=400, detail="Choose the start time to run the timer from")
+        if parse_dt(new_start_iso) > now + timedelta(minutes=1):
+            raise HTTPException(status_code=400, detail="Start time can't be in the future")
+    if closes_running and parse_dt(new_end_iso) > now + timedelta(minutes=1):
+        raise HTTPException(status_code=400, detail="End time can't be in the future")
 
     if not sessions:
-        # Create a new session from start to end (both required for fresh edit)
         if not new_start_iso and not new_end_iso:
             raise HTTPException(status_code=400, detail="Provide at least start_time or end_time")
         if not new_start_iso:
             raise HTTPException(status_code=400, detail="start_time required when no existing sessions")
+        if payload.till_now:
+            # Same rule as pressing Start: Meta Ads tasks wait for their earlier steps.
+            if task.get("ad_field"):
+                from ad_tasks_routes import guard_ad_task
+                await guard_ad_task(db, task, "start")
+            started_now = True
+        # Create a new session from start to end; Till now leaves it open (running).
         sessions = [{
             "start": new_start_iso,
             "end": new_end_iso,
@@ -1303,6 +1335,11 @@ async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Re
             "user_id": user.user_id,
         }]
     else:
+        if payload.till_now and not was_running:
+            raise HTTPException(
+                status_code=400,
+                detail="Till now only applies to a task that hasn't started or is running — use Resume on the timer",
+            )
         if new_start_iso:
             sessions[0]["start"] = new_start_iso
         if new_end_iso:
@@ -1327,18 +1364,25 @@ async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Re
     time_tracking["sessions"] = sessions
     time_tracking["total_seconds"] = total
 
-    # If finished (last session has end), keep/refresh status; running stays running
     last = sessions[-1]
-    if last.get("end") and time_tracking.get("status") != "running":
+    if payload.till_now:
+        time_tracking["status"] = "running"
+        time_tracking["current_session_start"] = last["start"]
+    elif closes_running:
+        # Setting an end time on a running timer stops it (like Pause).
+        time_tracking["status"] = "paused"
+        time_tracking.pop("current_session_start", None)
+    elif last.get("end") and time_tracking.get("status") != "running":
         time_tracking["status"] = time_tracking.get("status") or "paused"
 
-    await db.our_tasks.update_one(
-        {"task_id": task_id},
-        {"$set": {
-            "time_tracking": time_tracking,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
+    set_fields = {
+        "time_tracking": time_tracking,
+        "updated_at": now.isoformat(),
+    }
+    if started_now and task.get("status", "pending") == "pending":
+        set_fields["status"] = "in_progress"
+
+    await db.our_tasks.update_one({"task_id": task_id}, {"$set": set_fields})
 
     updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
