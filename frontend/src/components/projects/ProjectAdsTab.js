@@ -5,8 +5,9 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Pencil, X, MapPin, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, X, MapPin, Image as ImageIcon, Upload } from 'lucide-react';
 import { todayIST, currentEntryOf, fmtDate, money, upsertBudget } from './campaignBudget';
+import MetaCsvImportModal from './MetaCsvImportModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -134,6 +135,7 @@ export default function ProjectAdsTab({
   const tasks = project?.tasks || [];
 
   const [campaignFilter, setCampaignFilter] = useState('all');
+  const [showImport, setShowImport] = useState(false);
   const [workModal, setWorkModal] = useState(null);
   const [budgetModal, setBudgetModal] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -318,16 +320,41 @@ export default function ProjectAdsTab({
             Every ad across all campaigns. Add ads inside an ad set on the Campaigns tab.
           </p>
         </div>
-        <select
-          value={campaignFilter}
-          onChange={(e) => setCampaignFilter(e.target.value)}
-          className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-          data-testid="ads-campaign-filter"
-        >
-          <option value="all">All campaigns</option>
-          {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={campaignFilter}
+            onChange={(e) => setCampaignFilter(e.target.value)}
+            className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+            data-testid="ads-campaign-filter"
+          >
+            <option value="all">All campaigns</option>
+            {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {canEdit && (
+            <Button type="button" variant="outline" onClick={() => setShowImport(true)} size="sm" data-testid="ads-import-csv-btn">
+              <Upload className="h-3.5 w-3.5 mr-1" /> Import CSV
+            </Button>
+          )}
+        </div>
       </div>
+
+      {showImport && (
+        <MetaCsvImportModal
+          project={project}
+          allowedLevels={['ad']}
+          headers={headers}
+          onClose={() => setShowImport(false)}
+          onImported={async () => {
+            const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+            onProjectUpdated(fresh.data);
+          }}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+      )}
 
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">

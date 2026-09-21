@@ -4,8 +4,9 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Trash2, Pencil, X, Megaphone, ChevronRight, ChevronDown, MapPin } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Megaphone, ChevronRight, ChevronDown, MapPin, Upload } from 'lucide-react';
 import { newId, todayIST, sortHistory, currentEntryOf, prevDay, fmtDate, money, upsertBudget, mergeFreshAdWork } from './campaignBudget';
+import MetaCsvImportModal from './MetaCsvImportModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -136,6 +137,7 @@ export default function ProjectCampaignsTab({
   const colSpan = isMeta ? 7 : 3;
 
   const [modal, setModal] = useState(null);
+  const [showImport, setShowImport] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Daily Meta reports — only used to count leads per budget period in the
@@ -476,17 +478,46 @@ export default function ProjectCampaignsTab({
           </p>
         </div>
         {canEdit && (
-          <Button
-            type="button"
-            onClick={() => open({ type: 'campaign', mode: 'add', name: '', amount: '', from_date: todayIST() })}
-            size="sm"
-            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-            data-testid="campaign-add-btn"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Campaign
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowImport(true)}
+              size="sm"
+              data-testid="campaign-import-csv-btn"
+            >
+              <Upload className="h-3.5 w-3.5 mr-1" /> Import CSV
+            </Button>
+            <Button
+              type="button"
+              onClick={() => open({ type: 'campaign', mode: 'add', name: '', amount: '', from_date: todayIST() })}
+              size="sm"
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              data-testid="campaign-add-btn"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Campaign
+            </Button>
+          </div>
         )}
       </div>
+
+      {showImport && (
+        <MetaCsvImportModal
+          project={project}
+          allowedLevels={['campaign', 'adset']}
+          headers={headers}
+          onClose={() => setShowImport(false)}
+          onImported={async () => {
+            const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+            onProjectUpdated(fresh.data);
+          }}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+      )}
 
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
