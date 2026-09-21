@@ -33,3 +33,29 @@ export const upsertBudget = (history, amount, fromDate) => sortHistory([
   ...(history || []).filter(e => e.from_date !== fromDate),
   { id: newId('bud'), amount, from_date: fromDate },
 ]);
+
+// The Campaigns tab only edits names, budgets, locations and the ad set / ad
+// structure. Everything else on an ad — content / creative links, uploaded
+// files, assignees, task ids, setup status — is written elsewhere (the Ads
+// tab, and assignees submitting from My Tasks), and a campaign's `budget_type`
+// is set on the Ads tab. So before saving, take those from the server's
+// current copy instead of this tab's possibly stale one.
+export const mergeFreshAdWork = (next, fresh) => (next || []).map((c) => {
+  const fc = (fresh || []).find(x => x.id === c.id);
+  if (!fc) return c;
+  return {
+    ...c,
+    ...(fc.budget_type !== undefined ? { budget_type: fc.budget_type } : {}),
+    ad_sets: (c.ad_sets || []).map((s) => {
+      const fs = (fc.ad_sets || []).find(x => x.id === s.id);
+      if (!fs) return s;
+      return {
+        ...s,
+        ads: (s.ads || []).map((ad) => {
+          const fa = (fs.ads || []).find(x => x.id === ad.id);
+          return fa ? { ...fa, name: ad.name } : ad;
+        }),
+      };
+    }),
+  };
+});

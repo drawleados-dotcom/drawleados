@@ -108,10 +108,17 @@ class ProjectTaskCreate(BaseModel):
     # our_tasks_routes calendar-submit), which fills it in on the entry.
     content_calendar_entry_id: Optional[str] = None
     content_calendar_field: Optional[str] = None  # content_link | creative_link | editing_link | thumbnail_link | posting | post_report
+    # Meta Ads ad tasks (Projects > Ads): which ad this task is for and which
+    # step of it. The assignee submits from My Tasks (see ad_tasks_routes).
+    ad_campaign_id: Optional[str] = None
+    ad_set_id: Optional[str] = None
+    ad_id: Optional[str] = None
+    ad_field: Optional[str] = None  # content | creative | editing | setup
 
 
 CALENDAR_LINK_FIELDS = {"content_link", "creative_link", "editing_link", "thumbnail_link"}
 CALENDAR_TASK_FIELDS = CALENDAR_LINK_FIELDS | {"posting", "post_report"}
+AD_TASK_FIELDS = {"content", "creative", "editing", "setup"}
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
@@ -810,6 +817,10 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         raise HTTPException(status_code=400, detail="Invalid content calendar field")
     if bool(payload.content_calendar_field) != bool(payload.content_calendar_entry_id):
         raise HTTPException(status_code=400, detail="content_calendar_entry_id and content_calendar_field go together")
+    if payload.ad_field and payload.ad_field not in AD_TASK_FIELDS:
+        raise HTTPException(status_code=400, detail="Invalid ad field")
+    if bool(payload.ad_field) != bool(payload.ad_id and payload.ad_set_id and payload.ad_campaign_id):
+        raise HTTPException(status_code=400, detail="ad_field, ad_id, ad_set_id and ad_campaign_id go together")
 
     now = datetime.now(timezone.utc).isoformat()
     task = {
@@ -837,6 +848,10 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         "erp_task_type": payload.erp_task_type,
         "content_calendar_entry_id": payload.content_calendar_entry_id,
         "content_calendar_field": payload.content_calendar_field,
+        "ad_campaign_id": payload.ad_campaign_id,
+        "ad_set_id": payload.ad_set_id,
+        "ad_id": payload.ad_id,
+        "ad_field": payload.ad_field,
         "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
         "created_at": now,
         "updated_at": now,

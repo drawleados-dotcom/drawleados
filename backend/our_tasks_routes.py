@@ -642,6 +642,14 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         if not (is_admin or is_creator or is_assignee):
             raise HTTPException(status_code=403, detail="Only the creator, the assignee, or an admin can edit this task.")
         
+        # Meta Ads ad tasks: completing / starting is gated (see ad_tasks_routes).
+        if task.get("ad_field") and task_data.status and task_data.status != task.get("status"):
+            from ad_tasks_routes import guard_ad_task
+            if task_data.status == "completed":
+                await guard_ad_task(db, task, "complete")
+            elif task_data.status == "in_progress":
+                await guard_ad_task(db, task, "start")
+
         update_dict = {k: v for k, v in task_data.dict().items() if v is not None}
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
         if update_dict.get("status") == "completed":
@@ -717,6 +725,14 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
         task = await db.our_tasks.find_one({"task_id": task_id})
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+
+        # Meta Ads ad tasks: completing / starting is gated (see ad_tasks_routes).
+        if task.get("ad_field") and status_data.status != task.get("status"):
+            from ad_tasks_routes import guard_ad_task
+            if status_data.status == "completed":
+                await guard_ad_task(db, task, "complete")
+            elif status_data.status == "in_progress":
+                await guard_ad_task(db, task, "start")
 
         update_fields = {
             "status": status_data.status,
@@ -1036,6 +1052,12 @@ async def time_tracking_action(task_id: str, action_data: TimeTrackingAction, re
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
+        # Meta Ads ad tasks: can't start until the earlier steps are done, and
+        # can't be finished from the timer — they complete by submitting.
+        if task.get("ad_field") and action_data.action in ("start", "resume", "finish"):
+            from ad_tasks_routes import guard_ad_task
+            await guard_ad_task(db, task, "complete" if action_data.action == "finish" else "start")
+
         now = datetime.now(timezone.utc)
         time_tracking = task.get("time_tracking", {"total_seconds": 0, "status": "not_started", "sessions": []})
         action = action_data.action
@@ -1322,6 +1344,11 @@ async def request_task_approval(task_id: str, payload: ApprovalRequestPayload, r
     task = await db.our_tasks.find_one({"task_id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Meta Ads ad tasks complete by submitting from their panel, not by approval.
+    if task.get("ad_field"):
+        from ad_tasks_routes import guard_ad_task
+        await guard_ad_task(db, task, "complete")
 
     approval_request = {
         "approver_role": payload.approver_role,

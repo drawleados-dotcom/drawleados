@@ -61,18 +61,25 @@ const allocationOf = (campaign, adSet) => {
 
 // Module-scope (not defined inside the tab's render) so typing in the
 // popups never remounts these.
-function WorkCell({ work, ad, users, tasks, canEdit, onEdit, textPrimary, textSecondary }) {
+function WorkCell({ work, ad, users, tasks, canEdit, onEdit, onViewFile, textPrimary, textSecondary }) {
   const cfg = WORK[work];
   const userId = ad[`${work}_assignee`];
   const name = (users || []).find(u => u.user_id === userId)?.name || ad[`${work}_assignee_name`] || '';
   const date = ad[`${work}_date`];
   const link = cfg.hasLink ? ad[`${work}_link`] : '';
   const task = (tasks || []).find(t => t.task_id === ad[`${work}_task_id`]);
-  const empty = !name && !date && !link;
+  // An image the assignee uploaded from My Tasks (Creative / Editing).
+  const fileId = ad[`${work}_file_id`];
+  const empty = !name && !date && !link && !fileId;
   return (
     <div className="space-y-1" data-testid={`ad-${work}-${ad.id}`}>
       {link && (
         <a href={link} target="_blank" rel="noreferrer" className="text-xs text-[#6366f1] hover:underline block">Open link</a>
+      )}
+      {fileId && (
+        <button type="button" onClick={() => onViewFile?.(fileId)} className="text-xs text-[#6366f1] hover:underline block text-left" data-testid={`ad-${work}-file-${ad.id}`}>
+          View uploaded image{ad[`${work}_file_name`] ? ` (${ad[`${work}_file_name`]})` : ''}
+        </button>
       )}
       {(name || date) && (
         <p className={`text-xs ${textPrimary}`}>
@@ -130,6 +137,16 @@ export default function ProjectAdsTab({
   const [workModal, setWorkModal] = useState(null);
   const [budgetModal, setBudgetModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null); // an uploaded creative being viewed
+
+  const viewFile = async (fileId) => {
+    try {
+      const res = await axios.get(`${API}/api/ad-tasks/files/${fileId}`, { headers });
+      setPreview({ name: res.data.filename, data_url: res.data.data_url });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Could not load the image');
+    }
+  };
 
   const rows = [];
   campaigns.forEach((c) => {
@@ -137,8 +154,14 @@ export default function ProjectAdsTab({
     (c.ad_sets || []).forEach((a) => (a.ads || []).forEach((ad) => rows.push({ c, a, ad })));
   });
 
-  const persist = async (next) => {
+  // `mutate` is handed the campaigns as they are on the server right now, not
+  // this tab's copy: assignees submit from My Tasks straight into the ads
+  // (content link, creative, status), so saving a stale copy of the whole
+  // array would wipe those submissions out.
+  const persist = async (mutate) => {
     try {
+      const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+      const next = mutate(fresh.data?.campaigns || []);
       const res = await axios.patch(`${API}/api/projects/${project.project_id}`, { campaigns: next }, { headers });
       onProjectUpdated?.(res.data);
       // The PATCH response has no task list; refetch so task statuses stay.
@@ -150,7 +173,7 @@ export default function ProjectAdsTab({
     }
   };
 
-  const mapAd = (cid, sid, aid, fn) => campaigns.map(c => (c.id !== cid ? c : {
+  const mapAd = (list, cid, sid, aid, fn) => list.map(c => (c.id !== cid ? c : {
     ...c,
     ad_sets: (c.ad_sets || []).map(s => (s.id !== sid ? s : {
       ...s,
@@ -160,11 +183,11 @@ export default function ProjectAdsTab({
 
   const changeType = (row, value) => {
     if (!canEdit) return;
-    persist(mapAd(row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, ad_type: value })));
+    persist(list => mapAd(list, row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, ad_type: value })));
   };
   const cycleSetup = (row) => {
     if (!canEdit) return;
-    persist(mapAd(row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, setup_status: nextSetup(ad.setup_status) })));
+    persist(list => mapAd(list, row.c.id, row.a.id, row.ad.id, ad => ({ ...ad, setup_status: nextSetup(ad.setup_status) })));
   };
 
   const openWork = (row, work) => {
@@ -175,6 +198,7 @@ export default function ProjectAdsTab({
       assignee: ad[`${work}_assignee`] || '',
       date: ad[`${work}_date`] || '',
       link: WORK[work].hasLink ? (ad[`${work}_link`] || '') : '',
+      origLink: WORK[work].hasLink ? (ad[`${work}_link`] || '') : '',
       locked: !!ad[`${work}_task_id`],
     });
   };
@@ -200,6 +224,12 @@ export default function ProjectAdsTab({
           due_date: m.date,
           department: 'meta',
           category: cfg.category,
+          // Tags the task with its ad + step so My Tasks shows the ad details
+          // and enforces the order (Content, then Creative/Editing, then Ad Setup).
+          ad_campaign_id: m.campaignId,
+          ad_set_id: m.adSetId,
+          ad_id: m.adId,
+          ad_field: m.work,
         }, { headers });
         taskId = res.data?.task_id || null;
         createdTask = true;
@@ -220,9 +250,12 @@ export default function ProjectAdsTab({
       [`${m.work}_assignee_name`]: assignee ? assigneeName : '',
       [`${m.work}_date`]: date || '',
       [`${m.work}_task_id`]: taskId,
-      ...(cfg.hasLink ? { [`${m.work}_link`]: (m.link || '').trim() } : {}),
+      // Only write the link if it was actually changed here — the popup may
+      // have opened on a stale copy, and an assignee could have submitted the
+      // real link since.
+      ...(cfg.hasLink && (m.link || '').trim() !== (m.origLink || '') ? { [`${m.work}_link`]: (m.link || '').trim() } : {}),
     };
-    const ok = await persist(mapAd(m.campaignId, m.adSetId, m.adId, x => ({ ...x, ...patch })));
+    const ok = await persist(list => mapAd(list, m.campaignId, m.adSetId, m.adId, x => ({ ...x, ...patch })));
     setSaving(false);
     if (ok) {
       toast.success(createdTask ? `${cfg.label} assigned — task created` : `${cfg.label} saved`);
@@ -242,7 +275,7 @@ export default function ProjectAdsTab({
     const amount = parseAmount(m.amount);
     if (amount === null) { toast.error('Enter a daily budget greater than 0'); return; }
     if (!m.from_date) { toast.error('Pick the date this budget starts from'); return; }
-    const next = campaigns.map((c) => {
+    const apply = (list) => list.map((c) => {
       if (c.id !== m.campaignId) return c;
       if (m.type === 'cbo') {
         return { ...c, budget_type: 'cbo', budget_history: upsertBudget(c.budget_history, amount, m.from_date) };
@@ -254,7 +287,7 @@ export default function ProjectAdsTab({
       };
     });
     setSaving(true);
-    const ok = await persist(next);
+    const ok = await persist(apply);
     setSaving(false);
     if (ok) { toast.success('Budget saved'); setBudgetModal(null); }
   };
@@ -360,7 +393,7 @@ export default function ProjectAdsTab({
                         )}
                       </td>
                       <td className="p-3 min-w-[150px]">
-                        <WorkCell work="content" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'content')} textPrimary={textPrimary} textSecondary={textSecondary} />
+                        <WorkCell work="content" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'content')} onViewFile={viewFile} textPrimary={textPrimary} textSecondary={textSecondary} />
                       </td>
                       <td className="p-3 min-w-[130px]">
                         <Select value={typeOf(ad)} onValueChange={(v) => changeType(row, v)} disabled={!canEdit}>
@@ -373,17 +406,17 @@ export default function ProjectAdsTab({
                         </Select>
                       </td>
                       <td className="p-3 min-w-[150px]">
-                        <WorkCell work="creative" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'creative')} textPrimary={textPrimary} textSecondary={textSecondary} />
+                        <WorkCell work="creative" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'creative')} onViewFile={viewFile} textPrimary={textPrimary} textSecondary={textSecondary} />
                       </td>
                       <td className="p-3 min-w-[150px]">
                         {isReel ? (
-                          <WorkCell work="editing" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'editing')} textPrimary={textPrimary} textSecondary={textSecondary} />
+                          <WorkCell work="editing" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'editing')} onViewFile={viewFile} textPrimary={textPrimary} textSecondary={textSecondary} />
                         ) : (
                           <span className={`text-xs ${textSecondary}`} title="Editing applies to video (Reel) ads">—</span>
                         )}
                       </td>
                       <td className="p-3 min-w-[150px]">
-                        <WorkCell work="setup" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'setup')} textPrimary={textPrimary} textSecondary={textSecondary} />
+                        <WorkCell work="setup" ad={ad} users={users} tasks={tasks} canEdit={canEdit} onEdit={() => openWork(row, 'setup')} onViewFile={viewFile} textPrimary={textPrimary} textSecondary={textSecondary} />
                       </td>
                       <td className="p-3">
                         <button
@@ -544,6 +577,21 @@ export default function ProjectAdsTab({
               <Button type="button" onClick={saveBudget} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="ad-budget-save">
                 {saving ? 'Saving…' : 'Save'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {preview && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4" onClick={() => setPreview(null)}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto`} onClick={(e) => e.stopPropagation()} data-testid="ad-file-preview">
+            <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+              <p className={`text-sm font-medium ${textPrimary}`}>{preview.name || 'Creative'}</p>
+              <button onClick={() => setPreview(null)} className={textSecondary}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-4">
+              <img src={preview.data_url} alt={preview.name || 'creative'} className="max-w-full mx-auto rounded-lg" />
+              <a href={preview.data_url} download={preview.name || 'creative'} className="text-xs text-[#6366f1] hover:underline mt-3 inline-block">Download</a>
             </div>
           </div>
         </div>

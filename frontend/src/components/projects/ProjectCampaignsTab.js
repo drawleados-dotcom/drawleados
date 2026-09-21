@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Trash2, Pencil, X, Megaphone, ChevronRight, ChevronDown, MapPin } from 'lucide-react';
-import { newId, todayIST, sortHistory, currentEntryOf, prevDay, fmtDate, money, upsertBudget } from './campaignBudget';
+import { newId, todayIST, sortHistory, currentEntryOf, prevDay, fmtDate, money, upsertBudget, mergeFreshAdWork } from './campaignBudget';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -180,9 +180,17 @@ export default function ProjectCampaignsTab({
 
   const persist = async (next) => {
     try {
+      // Ads carry work done elsewhere (the Ads tab, and assignees submitting
+      // from My Tasks). Take that from the server's current copy so this tab's
+      // older copy of the campaigns can't wipe it out on save.
+      let merged = next;
+      try {
+        const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+        merged = mergeFreshAdWork(next, fresh.data?.campaigns || []);
+      } catch (e) { /* couldn't re-read — save what we have */ }
       const res = await axios.patch(
         `${API}/api/projects/${project.project_id}`,
-        { campaigns: next },
+        { campaigns: merged },
         { headers },
       );
       onProjectUpdated?.(res.data);

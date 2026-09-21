@@ -17,7 +17,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle,
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff, ChevronDown
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff, ChevronDown, Megaphone
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ import useAutoRefresh from '../hooks/useAutoRefresh';
 import OperationsSummaryCards from '../components/operations/OperationsSummaryCards';
 import OperationsTabsBar from '../components/operations/OperationsTabsBar';
 import CalendarTaskPanel from '../components/operations/CalendarTaskPanel';
+import AdTaskPanel from '../components/operations/AdTaskPanel';
 import { buildErpPrompt } from '../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
 
@@ -494,8 +495,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // leads (Assign to Team access) rather than the assignee's own My Tasks —
   // doesn't apply to the creator viewing their own created tasks.
   const isHiddenProjectTaskForAssignee = useCallback((task) => {
-    // Content Calendar deliverables exist to be done by their assignee.
-    if (task.content_calendar_field) return false;
+    // Content Calendar and Meta Ads ad deliverables exist to be done by their assignee.
+    if (task.content_calendar_field || task.ad_field) return false;
     if (task.assigned_to !== user?.user_id || task.created_by === user?.user_id) return false;
     if (!task.project_id) return false;
     const creatorRole = (usersById[task.created_by]?.role || '').toLowerCase();
@@ -831,7 +832,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       setStatusFilterBypassIds(prev => new Set(prev).add(taskId));
       loadTasks();
     } catch (error) {
-      toast.error('Failed to update status');
+      toast.error(error.response?.data?.detail || 'Failed to update status');
     }
   };
 
@@ -2736,6 +2737,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               <CalendarDays className="h-3 w-3 mr-1" />Social Media · {({ content_link: 'Content Link', creative_link: 'Creative Link', editing_link: 'Editing', thumbnail_link: 'Thumbnail', posting: 'Posting', post_report: 'Post Report' })[task.content_calendar_field] || 'Link'}
                             </Badge>
                           )}
+                          {task.ad_field && (
+                            <Badge className="text-xs bg-[#3b82f6]/20 text-[#3b82f6]" data-testid={`ad-task-badge-${task.task_id}`}>
+                              <Megaphone className="h-3 w-3 mr-1" />Meta Ads · {({ content: 'Content', creative: 'Creative', editing: 'Editing', setup: 'Ad Setup' })[task.ad_field] || 'Ad'}
+                            </Badge>
+                          )}
                           {task.project_name && (
                             <Badge className="text-xs bg-[#6366f1]/20 text-[#6366f1]" data-testid={`project-badge-${task.task_id}`}>
                               <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
@@ -2983,7 +2989,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             );
                           })()}
                           {mainTab === 'assigned_to_me' && task.status !== 'completed' && !isAwaitingOrApproved(task) && (
-                            task.content_calendar_field ? (
+                            task.ad_field ? (
+                              // Meta Ads ad task — done from its own panel (content link,
+                              // creative upload, or ad setup; assignee only), and only once
+                              // the earlier steps are done. Not the usual Complete.
+                              task.assigned_to === user?.user_id && (
+                                <Button
+                                  size="sm"
+                                  className="bg-[#3b82f6] hover:bg-[#2563eb] text-white h-8 px-3"
+                                  onClick={(e) => { e.stopPropagation(); setViewingTask(task); setShowTaskDetailModal(true); }}
+                                  data-testid={`ad-task-btn-${task.task_id}`}
+                                  title="Open the ad details and complete this task"
+                                >
+                                  <Megaphone className="h-3 w-3 mr-1" />
+                                  {({ content: 'Submit Content', creative: 'Submit Creative', editing: 'Submit Editing', setup: 'Ad Setup' })[task.ad_field] || 'Open Ad'}
+                                </Button>
+                              )
+                            ) : task.content_calendar_field ? (
                               // Content Calendar task — done from its own panel (link,
                               // schedule/post, or report; assignee only), not the usual Complete.
                               task.assigned_to === user?.user_id && (
@@ -3981,6 +4003,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
+                {viewingTask.ad_field && (
+                  <AdTaskPanel
+                    task={viewingTask}
+                    headers={headers}
+                    onSubmitted={(updated) => { setViewingTask(prev => ({ ...prev, ...updated })); loadTasks(); }}
+                    textPrimary={textPrimary}
+                    textSecondary={textSecondary}
+                    bgSecondary={bgSecondary}
+                    borderColor={borderColor}
+                  />
+                )}
                 {viewingTask.content_calendar_field && (
                   <CalendarTaskPanel
                     task={viewingTask}
