@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { categoryBadgeClass } from '../lib/categoryColor';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -2755,7 +2756,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       <td className="px-2 py-3 text-sm" data-testid={`category-cell-${task.task_id}`}>
                         {task.category ? (
                           <div className="flex flex-col gap-1">
-                            <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs w-fit">{task.category}</Badge>
+                            <Badge className={`${categoryBadgeClass(task.category)} text-xs w-fit`}>{task.category}</Badge>
                             {task.department && (
                               <span className={`text-xs ${textSecondary}`}>{task.department === 'all' ? 'All Departments' : task.department}</span>
                             )}

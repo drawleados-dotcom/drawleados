@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { categoryBadgeClass } from '../../lib/categoryColor';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Plus, ChevronLeft, ChevronRight, Calendar, ExternalLink, Pencil, Trash2, X } from 'lucide-react';
@@ -246,7 +247,7 @@ export default function ProjectScopesTab({
                         'bg-[#71717a]/20 text-[#71717a]'
                       }>{task.status?.replace('_', ' ') || 'pending'}</Badge>
                       {task.category && (
-                        <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{task.category}</Badge>
+                        <Badge className={`${categoryBadgeClass(task.category)} text-xs`}>{task.category}</Badge>
                       )}
                     </div>
                     <p className={`text-xs ${textSecondary} mt-1`}>

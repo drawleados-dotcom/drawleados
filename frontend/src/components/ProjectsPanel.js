@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { categoryBadgeClass } from '../lib/categoryColor';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap, UserCircle, Image as ImageIcon } from 'lucide-react';
@@ -2655,7 +2656,7 @@ export default function ProjectsPanel({
                           {task.type || 'general'}
                         </Badge>
                         {task.category && (
-                          <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{task.category}</Badge>
+                          <Badge className={`${categoryBadgeClass(task.category)} text-xs`} data-testid={`task-category-badge-${task.task_id}`}>{task.category}</Badge>
                         )}
                         {task.erp_task_type && (
                           <Badge className="bg-violet-500/20 text-violet-400 text-xs">{task.erp_task_type}</Badge>
