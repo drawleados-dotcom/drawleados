@@ -285,19 +285,22 @@ export default function ProjectCampaignsTab({
       }
     } else if (m.type === 'ad') {
       if (m.mode === 'add') {
+        // created_at is stamped once, here, purely for the "New Ads" count —
+        // it never gates reporting; only an explicit Start/End Date does.
         next = mapAdSet(m.campaignId, m.adSetId, a => ({
           ...a,
           ads: [...(a.ads || []), {
-            id: newId('ad'), name, created_at: m.created_at || todayIST(),
+            id: newId('ad'), name, created_at: todayIST(),
             start_date: m.start_date || null, end_date: m.end_date || null,
           }],
         }));
         msg = 'Ad added';
       } else {
+        // created_at isn't edited here — it stays whatever it already was.
         next = mapAdSet(m.campaignId, m.adSetId, a => ({
           ...a,
           ads: (a.ads || []).map(x => (x.id === m.id ? {
-            ...x, name, created_at: m.created_at || null, start_date: m.start_date || null, end_date: m.end_date || null,
+            ...x, name, start_date: m.start_date || null, end_date: m.end_date || null,
           } : x)),
         }));
         msg = 'Ad updated';
@@ -408,7 +411,7 @@ export default function ProjectCampaignsTab({
         {canEdit && (
           <button
             type="button"
-            onClick={() => open({ type: 'ad', mode: 'add', campaignId: c.id, adSetId: a.id, name: '', created_at: todayIST(), start_date: '', end_date: '' })}
+            onClick={() => open({ type: 'ad', mode: 'add', campaignId: c.id, adSetId: a.id, name: '', start_date: '', end_date: '' })}
             className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
             data-testid={`ad-add-${a.id}`}
           >
@@ -432,15 +435,15 @@ export default function ProjectCampaignsTab({
             >
               {ad.active !== false ? 'Active' : 'Paused'}
             </button>
-            {(ad.start_date || ad.created_at || ad.end_date) && (
+            {(ad.start_date || ad.end_date) && (
               <span className={`text-[10px] ${textSecondary} whitespace-nowrap`}>
-                {ad.start_date ? fmtDate(ad.start_date) : ad.created_at ? `${fmtDate(ad.created_at)} (created)` : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
+                {ad.start_date ? fmtDate(ad.start_date) : 'No start'} → {ad.end_date ? fmtDate(ad.end_date) : 'ongoing'}
               </span>
             )}
           </span>
           {canEdit && (
             <span className="inline-flex gap-1 shrink-0">
-              <button type="button" onClick={() => open({ type: 'ad', mode: 'edit', campaignId: c.id, adSetId: a.id, id: ad.id, name: ad.name, created_at: ad.created_at || '', start_date: ad.start_date || '', end_date: ad.end_date || '' })} className={iconBtn} title="Edit ad">
+              <button type="button" onClick={() => open({ type: 'ad', mode: 'edit', campaignId: c.id, adSetId: a.id, id: ad.id, name: ad.name, start_date: ad.start_date || '', end_date: ad.end_date || '' })} className={iconBtn} title="Edit ad">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button type="button" onClick={() => deleteAd(c, a, ad)} className="p-1 text-red-500 hover:text-red-400" title="Delete">
@@ -817,19 +820,6 @@ export default function ProjectCampaignsTab({
               )}
               {isMeta && (modal.type === 'campaign' || modal.type === 'adset' || modal.type === 'ad') && (
                 <div className="grid grid-cols-2 gap-3">
-                  {modal.type === 'ad' && (
-                    <div className="col-span-2">
-                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Date of Creation</p>
-                      <Input
-                        type="date"
-                        value={modal.created_at || ''}
-                        onChange={(e) => setModal(m => ({ ...m, created_at: e.target.value }))}
-                        className={inputCls}
-                        data-testid="campaign-form-created-at"
-                      />
-                      <p className={`text-[11px] ${textSecondary} mt-1`}>Used as the Start Date below when that's left blank, and for the "New Ads" count on the Performance View.</p>
-                    </div>
-                  )}
                   <div>
                     <p className={`text-xs font-medium ${textSecondary} mb-1`}>Start Date</p>
                     <Input
@@ -852,7 +842,7 @@ export default function ProjectCampaignsTab({
                   </div>
                   <p className={`text-[11px] ${textSecondary} col-span-2`}>
                     Reports for this {modal.type === 'campaign' ? 'campaign' : modal.type === 'adset' ? 'ad set' : 'ad'}
-                    {modal.type !== 'ad' && ' (and everything under it)'} are only expected on or after the start date{modal.type === 'ad' ? ' (or the date of creation, if no start date is set)' : ''}, and stop being expected after the end date.
+                    {modal.type !== 'ad' && ' (and everything under it)'} are only expected on or after the start date, and stop being expected after the end date. Leave both blank for no restriction.
                   </p>
                 </div>
               )}

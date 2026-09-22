@@ -508,10 +508,14 @@ def _entity_active_on(entity: dict, day: str) -> bool:
 
 def _due_reason(campaign: dict, ad_set: dict, ad: dict, day: str):
     """(is_due, reason_if_not) for one ad on one day — checked campaign, then
-    ad set, then the ad itself, so the first blocker found is the one shown.
-    An ad with no Start Date of its own falls back to when it was created
-    (created_at) so ads that predate this feature keep behaving as they
-    always have."""
+    ad set, then the ad itself, so the first (most general) blocker found is
+    the one shown. Only an explicit Start/End Date or Active flag at a level
+    restricts it — a level with none set imposes no restriction of its own,
+    so an ad with no dates of its own simply follows its ad set's and
+    campaign's. `created_at` (when the ad was made) is not used here — it's
+    tracking only, for the "New Ads" count — so an ad nobody has explicitly
+    scheduled is never silently excluded just because of when it happened to
+    be added or imported."""
     for label, entity in (("campaign", campaign), ("ad set", ad_set)):
         if entity.get("active") is False:
             return False, f"its {label} is paused"
@@ -523,7 +527,7 @@ def _due_reason(campaign: dict, ad_set: dict, ad: dict, day: str):
             return False, f"its {label} ended {end}"
     if ad.get("active") is False:
         return False, "it is paused"
-    start = (ad.get("start_date") or ad.get("created_at") or "")[:10]
+    start = (ad.get("start_date") or "")[:10]
     if start and day < start:
         return False, f"it starts {start}"
     end = (ad.get("end_date") or "")[:10]
