@@ -33,7 +33,21 @@ const OUTREACH_IMPORT_FIELDS = [
   { key: 'category_name', label: 'Category', synonyms: ['category', 'category name', 'business category'] },
 ];
 
-const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', phone2: '', website: '', status: 'To do', location: '', category_id: '', remarks: '' });
+const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', phone2: '', website: '', status: 'To do', location: '', location_type: '', category_id: '', remarks: '' });
+
+// Local / International classification — a source or an outreach row without
+// an explicit choice is guessed server-side from its Location text, so every
+// existing row keeps showing under Local exactly as it does today.
+const LOC_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'local', label: 'Local' },
+  { key: 'international', label: 'International' },
+];
+const LOCATION_TYPE_OPTIONS = [
+  { value: '', label: 'Auto (guess from Location)' },
+  { value: 'local', label: 'Local' },
+  { value: 'international', label: 'International' },
+];
 
 const TABS = [
   { key: 'outreach', label: 'Outreach', icon: Send },
@@ -109,13 +123,16 @@ const BNIOutreachPage = () => {
 
   const [sources, setSources] = useState([]);
   const [showSourceModal, setShowSourceModal] = useState(false);
-  const [sourceForm, setSourceForm] = useState({ name: '', sheet_url: '', sourced_by: '', location: '' });
+  const [sourceForm, setSourceForm] = useState({ name: '', sheet_url: '', sourced_by: '', location: '', location_type: '' });
   const [sourceSaving, setSourceSaving] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [showEditSourceModal, setShowEditSourceModal] = useState(false);
-  const [editSourceForm, setEditSourceForm] = useState({ source_id: '', sourced_by: '', location: '' });
+  const [editSourceForm, setEditSourceForm] = useState({ source_id: '', sourced_by: '', location: '', location_type: '' });
   const [editSourceSaving, setEditSourceSaving] = useState(false);
+  // Local / International sub-tab, independent per board (Sources vs Outreach).
+  const [sourceLocTab, setSourceLocTab] = useState('all');
+  const [outreachLocTab, setOutreachLocTab] = useState('all');
 
   // Outreach tab filters
   const [filterChapter, setFilterChapter] = useState('all');
@@ -189,13 +206,19 @@ const BNIOutreachPage = () => {
     return w !== '' && w !== 'none' && w !== 'n/a' && w !== '-';
   };
   const dropdownFiltered = useMemo(() => outreach.filter((o) => {
+    if (outreachLocTab !== 'all' && (o.location_type || 'local') !== outreachLocTab) return false;
     if (filterChapter !== 'all' && (o.chapter_name || '') !== filterChapter) return false;
     if (filterLocation !== 'all' && (o.location || '') !== filterLocation) return false;
     if (filterCategory !== 'all' && (o.category_name || '') !== filterCategory) return false;
     if (filterWebsite === 'has' && !hasWebsite(o)) return false;
     if (filterWebsite === 'none' && hasWebsite(o)) return false;
     return true;
-  }), [outreach, filterChapter, filterLocation, filterCategory, filterWebsite]);
+  }), [outreach, outreachLocTab, filterChapter, filterLocation, filterCategory, filterWebsite]);
+
+  const visibleSources = useMemo(
+    () => (sourceLocTab === 'all' ? sources : sources.filter((s) => (s.location_type || 'local') === sourceLocTab)),
+    [sources, sourceLocTab],
+  );
 
   const outreachSummary = useMemo(() => {
     const counts = { Total: dropdownFiltered.length };
@@ -231,7 +254,7 @@ const BNIOutreachPage = () => {
       name: o.name || '', brand_name: o.brand_name || '', chapter_name: o.chapter_name || '',
       email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '', phone2: o.phone2 || '',
       website: o.website || '', status: o.status || 'To do', location: o.location || '',
-      category_id: o.category_id || '', remarks: o.remarks || '',
+      location_type: o.location_type || '', category_id: o.category_id || '', remarks: o.remarks || '',
     });
     setShowModal(true);
   };
@@ -330,7 +353,7 @@ const BNIOutreachPage = () => {
       setSources(res.data || []);
     } catch (error) { /* silent */ }
   };
-  const openAddSource = () => { setSourceForm({ name: '', sheet_url: '', sourced_by: '', location: '' }); setShowSourceModal(true); };
+  const openAddSource = () => { setSourceForm({ name: '', sheet_url: '', sourced_by: '', location: '', location_type: '' }); setShowSourceModal(true); };
   const saveSource = async () => {
     if (!sourceForm.name.trim()) { toast.error('Source name is required'); return; }
     if (!sourceForm.sheet_url.trim()) { toast.error('Paste the Google Sheet link'); return; }
@@ -347,7 +370,7 @@ const BNIOutreachPage = () => {
     }
   };
   const openEditSource = (s) => {
-    setEditSourceForm({ source_id: s.source_id, sourced_by: s.sourced_by || '', location: s.location || '' });
+    setEditSourceForm({ source_id: s.source_id, sourced_by: s.sourced_by || '', location: s.location || '', location_type: s.location_type || '' });
     setShowEditSourceModal(true);
   };
   const saveEditSource = async () => {
@@ -356,6 +379,7 @@ const BNIOutreachPage = () => {
       await api.put(`/bni/outreach-sources/${editSourceForm.source_id}`, {
         sourced_by: editSourceForm.sourced_by,
         location: editSourceForm.location,
+        location_type: editSourceForm.location_type,
       });
       toast.success('Source updated');
       setShowEditSourceModal(false);
@@ -428,6 +452,24 @@ const BNIOutreachPage = () => {
     <div className="relative max-w-sm flex-1 min-w-[180px]">
       <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={testid} />
+    </div>
+  );
+
+  // All / Local / International sub-tabs — "Local" always reads exactly like
+  // today's page (everything not explicitly marked International).
+  const locTabBar = (value, onChange, testidPrefix) => (
+    <div className={`inline-flex rounded-lg border ${borderColor} p-1 ${bgSecondary} w-fit`}>
+      {LOC_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${value === t.key ? 'bg-[#6366f1] text-white' : textSecondary}`}
+          data-testid={`${testidPrefix}-${t.key}`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 
@@ -517,6 +559,7 @@ const BNIOutreachPage = () => {
           <>
             {activeTab === 'outreach' && (
               <div className="space-y-4">
+                {locTabBar(outreachLocTab, setOutreachLocTab, 'bni-outreach-loctab')}
                 <div className="flex items-center gap-2 flex-wrap">
                   {[
                     { label: 'All Chapters', value: filterChapter, set: setFilterChapter, opts: chapterOptions, tid: 'bni-outreach-filter-chapter' },
@@ -575,11 +618,11 @@ const BNIOutreachPage = () => {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Brand Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone 2</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
@@ -602,16 +645,6 @@ const BNIOutreachPage = () => {
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.chapter_name || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.email || '—'}</td>
                             <td className="px-4 py-3">
-                              {o.profile_link ? (
-                                <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
-                                  <LinkIcon className="h-3.5 w-3.5" /> View
-                                </a>
-                              ) : '—'}
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone2 || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
-                            <td className="px-4 py-3">
                               <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
                                 <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
                                   <SelectValue />
@@ -621,6 +654,16 @@ const BNIOutreachPage = () => {
                                 </SelectContent>
                               </Select>
                             </td>
+                            <td className="px-4 py-3">
+                              {o.profile_link ? (
+                                <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
+                                  <LinkIcon className="h-3.5 w-3.5" /> View
+                                </a>
+                              ) : '—'}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone2 || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.group || '—'}</td>
@@ -712,6 +755,7 @@ const BNIOutreachPage = () => {
                 <p className={`text-sm ${textSecondary}`}>
                   Add Google Sheets shared as "Anyone with the link can view". Each tab is treated as a category — the tab name is the category, and the part before its first bracket is the group. Sync pulls every tab's rows into the Outreach tab.
                 </p>
+                {locTabBar(sourceLocTab, setSourceLocTab, 'bni-source-loctab')}
                 <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -728,10 +772,12 @@ const BNIOutreachPage = () => {
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${borderColor}`}>
-                        {sources.length === 0 ? (
-                          <tr><td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
+                        {visibleSources.length === 0 ? (
+                          <tr><td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            {sources.length === 0 ? 'No sources yet — click "Add Source" to connect a Google Sheet.' : 'No sources match this filter.'}
+                          </td></tr>
                         ) : (
-                          sources.map((s) => (
+                          visibleSources.map((s) => (
                             <tr key={s.source_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
                               <td className={`px-4 py-3 font-medium ${textPrimary}`}>{s.name}</td>
                               <td className="px-4 py-3">
@@ -886,6 +932,17 @@ const BNIOutreachPage = () => {
                 <Label className={textPrimary}>Location</Label>
                 <Input value={sourceForm.location} onChange={(e) => setSourceForm({ ...sourceForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Chennai" data-testid="bni-source-location-input" />
               </div>
+              <div>
+                <Label className={textPrimary}>Local / International</Label>
+                <Select value={sourceForm.location_type || 'auto'} onValueChange={(v) => setSourceForm({ ...sourceForm, location_type: v === 'auto' ? '' : v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-source-loctype-input">
+                    <SelectValue placeholder="Auto (guess from Location)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCATION_TYPE_OPTIONS.map((o) => (<SelectItem key={o.value || 'auto'} value={o.value || 'auto'}>{o.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowSourceModal(false)}>Cancel</Button>
@@ -918,6 +975,17 @@ const BNIOutreachPage = () => {
               <div>
                 <Label className={textPrimary}>Location</Label>
                 <Input value={editSourceForm.location} onChange={(e) => setEditSourceForm({ ...editSourceForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Chennai" data-testid="bni-source-edit-location-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Local / International</Label>
+                <Select value={editSourceForm.location_type || 'auto'} onValueChange={(v) => setEditSourceForm({ ...editSourceForm, location_type: v === 'auto' ? '' : v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-source-edit-loctype-input">
+                    <SelectValue placeholder="Auto (guess from Location)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCATION_TYPE_OPTIONS.map((o) => (<SelectItem key={o.value || 'auto'} value={o.value || 'auto'}>{o.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
@@ -1085,6 +1153,17 @@ const BNIOutreachPage = () => {
               <div>
                 <Label className={textPrimary}>Location</Label>
                 <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+              </div>
+              <div>
+                <Label className={textPrimary}>Local / International</Label>
+                <Select value={form.location_type || 'auto'} onValueChange={(v) => setForm({ ...form, location_type: v === 'auto' ? '' : v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-loctype-input">
+                    <SelectValue placeholder="Auto (guess from Location)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCATION_TYPE_OPTIONS.map((o) => (<SelectItem key={o.value || 'auto'} value={o.value || 'auto'}>{o.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2">
                 <Label className={textPrimary}>Category</Label>

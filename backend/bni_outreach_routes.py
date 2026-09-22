@@ -26,6 +26,35 @@ OUTREACH_STATUSES = [
     "One to One Completed", "Not Interested", "Relationship", "Lead", "Later",
 ]
 
+LOCATION_TYPES = ["local", "international"]
+
+# Keyword hints for classifying a free-text Location as international when no
+# one has set it explicitly — covers the Gulf/international chapters this
+# module already sees in practice. Anything else (including blank) reads as
+# "local", so every source/outreach row that predates this field, and every
+# new one someone doesn't tag, keeps showing under Local exactly as today.
+_INTERNATIONAL_HINTS = [
+    "dubai", "uae", "u.a.e", "abu dhabi", "sharjah", "ajman", "fujairah", "ras al khaimah",
+    "qatar", "doha", "bahrain", "manama", "oman", "muscat", "kuwait",
+    "saudi", "ksa", "riyadh", "jeddah", "dammam",
+    "singapore", "malaysia", "kuala lumpur",
+    "london", "united kingdom", " uk", "uk ",
+    "usa", "u.s.a", "united states", "canada", "australia", "international",
+]
+
+
+def _guess_location_type(location: str) -> str:
+    loc = f" {_norm(location)} "
+    return "international" if any(hint in loc for hint in _INTERNATIONAL_HINTS) else "local"
+
+
+def _resolve_location_type(doc: dict) -> dict:
+    """Fill in `location_type` for a doc that predates this field (compute
+    on read, nothing persisted) — an explicit value already on the doc always
+    wins."""
+    doc["location_type"] = doc.get("location_type") or _guess_location_type(doc.get("location", ""))
+    return doc
+
 # Column synonyms used when importing outreach rows from a Google Sheet source
 # (same columns as the CSV import on the Outreach tab).
 SOURCE_FIELD_SYNONYMS = {
@@ -110,11 +139,15 @@ async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, ca
         {"_id": 0, "outreach_id": 1},
     )
     if existing:
+        # location_type isn't refreshed here either — same reasoning as status
+        # and remarks: a manual reclassification survives re-syncs. An
+        # unclassified row keeps guessing fresh from `location` on every read.
         await db.bni_outreach.update_one({"outreach_id": existing["outreach_id"]}, {"$set": fields})
         return 0, 1
     fields.update({
         "status": status,
         "remarks": "",
+        "location_type": _guess_location_type(fields["location"]),
         "outreach_id": f"bniout_{uuid.uuid4().hex[:10]}",
         "created_by": user_id,
         "created_at": now,
@@ -225,6 +258,7 @@ class OutreachCreate(BaseModel):
     website: str = ""
     status: str = "To do"
     location: str = ""
+    location_type: str = ""  # "local" | "international" | "" (blank = guess from location)
     category_id: str = ""
     remarks: str = ""
 
@@ -240,6 +274,7 @@ class OutreachUpdate(BaseModel):
     website: Optional[str] = None
     status: Optional[str] = None
     location: Optional[str] = None
+    location_type: Optional[str] = None
     category_id: Optional[str] = None
     remarks: Optional[str] = None
     meeting_date: Optional[str] = None  # only used when status -> Scheduled/Completed One to One
@@ -250,7 +285,8 @@ class OutreachUpdate(BaseModel):
 async def list_outreach(request: Request):
     from server import get_current_user, db
     await get_current_user(request)
-    return await db.bni_outreach.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    rows = await db.bni_outreach.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return [_resolve_location_type(r) for r in rows]
 
 
 @bni_outreach_router.post("")
@@ -269,6 +305,8 @@ async def create_outreach(payload: OutreachCreate, request: Request):
             group = category.get("group") or _group_from(category_name)
 
     status = payload.status if payload.status in OUTREACH_STATUSES else "To do"
+    location = payload.location.strip()
+    location_type = payload.location_type if payload.location_type in LOCATION_TYPES else _guess_location_type(location)
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "outreach_id": f"bniout_{uuid.uuid4().hex[:10]}",
@@ -281,7 +319,8 @@ async def create_outreach(payload: OutreachCreate, request: Request):
         "phone2": payload.phone2.strip(),
         "website": payload.website.strip(),
         "status": status,
-        "location": payload.location.strip(),
+        "location": location,
+        "location_type": location_type,
         "category_id": payload.category_id,
         "category_name": category_name,
         "group": group,
@@ -310,6 +349,15 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
     meeting_time = update_data.pop("meeting_time", None)
     if "status" in update_data and update_data["status"] not in OUTREACH_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {update_data['status']}")
+    # An explicit "" means "back to Auto" — unset it so it starts guessing
+    # fresh from Location again, same as a row that never had it set.
+    unset_fields = {}
+    if "location_type" in update_data:
+        if update_data["location_type"] == "":
+            unset_fields["location_type"] = ""
+            update_data.pop("location_type")
+        elif update_data["location_type"] not in LOCATION_TYPES:
+            raise HTTPException(status_code=400, detail=f"location_type must be one of {LOCATION_TYPES}")
     if "category_id" in update_data:
         category_name = ""
         group = ""
@@ -322,7 +370,10 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
         update_data["group"] = group
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    await db.bni_outreach.update_one({"outreach_id": outreach_id}, {"$set": update_data})
+    update_ops = {"$set": update_data}
+    if unset_fields:
+        update_ops["$unset"] = unset_fields
+    await db.bni_outreach.update_one({"outreach_id": outreach_id}, update_ops)
     updated = await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
 
     # Status-driven downstream actions.
@@ -334,7 +385,7 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
     elif new_status == "One to One Completed":
         await _sync_cross_chapter_oto(db, updated, "Completed", user.user_id, meeting_date, meeting_time)
 
-    return await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
+    return _resolve_location_type(await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0}))
 
 
 @bni_outreach_router.delete("/{outreach_id}")
@@ -354,18 +405,21 @@ class OutreachSourceCreate(BaseModel):
     sheet_url: str
     sourced_by: str = ""
     location: str = ""
+    location_type: str = ""  # "local" | "international" | "" (blank = guess from location)
 
 
 class OutreachSourceUpdate(BaseModel):
     sourced_by: Optional[str] = None
     location: Optional[str] = None
+    location_type: Optional[str] = None
 
 
 @bni_outreach_sources_router.get("")
 async def list_outreach_sources(request: Request):
     from server import get_current_user, db
     await get_current_user(request)
-    return await db.bni_outreach_sources.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    rows = await db.bni_outreach_sources.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_resolve_location_type(r) for r in rows]
 
 
 @bni_outreach_sources_router.post("")
@@ -378,13 +432,16 @@ async def create_outreach_source(payload: OutreachSourceCreate, request: Request
         raise HTTPException(status_code=400, detail="Source name is required")
     if not _sheet_csv_url(sheet_url):
         raise HTTPException(status_code=400, detail="Enter a valid Google Sheets link")
+    location = (payload.location or "").strip()
+    location_type = payload.location_type if payload.location_type in LOCATION_TYPES else _guess_location_type(location)
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "source_id": f"bnisrc_{uuid.uuid4().hex[:10]}",
         "name": name,
         "sheet_url": sheet_url,
         "sourced_by": (payload.sourced_by or "").strip(),
-        "location": (payload.location or "").strip(),
+        "location": location,
+        "location_type": location_type,
         "last_synced_at": None,
         "last_row_count": 0,
         "created_by": user.user_id,
@@ -402,10 +459,23 @@ async def update_outreach_source(source_id: str, payload: OutreachSourceUpdate, 
     update_data = {k: v.strip() if isinstance(v, str) else v for k, v in payload.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="Nothing to update")
-    result = await db.bni_outreach_sources.update_one({"source_id": source_id}, {"$set": update_data})
+    # Same "" == back to Auto convention as outreach entries.
+    unset_fields = {}
+    if "location_type" in update_data:
+        if update_data["location_type"] == "":
+            unset_fields["location_type"] = ""
+            update_data.pop("location_type")
+        elif update_data["location_type"] not in LOCATION_TYPES:
+            raise HTTPException(status_code=400, detail=f"location_type must be one of {LOCATION_TYPES}")
+    update_ops = {}
+    if update_data:
+        update_ops["$set"] = update_data
+    if unset_fields:
+        update_ops["$unset"] = unset_fields
+    result = await db.bni_outreach_sources.update_one({"source_id": source_id}, update_ops)
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Source not found")
-    return await db.bni_outreach_sources.find_one({"source_id": source_id}, {"_id": 0})
+    return _resolve_location_type(await db.bni_outreach_sources.find_one({"source_id": source_id}, {"_id": 0}))
 
 
 @bni_outreach_sources_router.delete("/{source_id}")
