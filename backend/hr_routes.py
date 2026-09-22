@@ -2912,12 +2912,14 @@ async def submit_payslip_for_approval(payslip_id: str, request: Request):
 
 @hr_router.put("/admin/payslip/{payslip_id}/approve")
 async def approve_payslip(payslip_id: str, request: Request, action: str = "approve"):
-    """Approve payslip (Super Admin)"""
+    """Approve payslip (HR Admin / Super Admin). The status value stays
+    "pending_super_admin" for backward compatibility with existing records
+    and the frontend's status labels — only who may act on it has widened."""
     from server import get_current_user
     user = await get_current_user(request)
-    
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only Super Admin can approve payslips")
+
+    if not has_hr_access(user):
+        raise HTTPException(status_code=403, detail="Only HR Admin or Super Admin can approve payslips")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
     if not payslip:
@@ -3927,7 +3929,7 @@ async def get_review(review_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Review not found")
     
     # Check access
-    if review["user_id"] != user.user_id and user.role not in ["admin", "super_admin", "project_manager"]:
+    if review["user_id"] != user.user_id and user.role != "project_manager" and not has_hr_access(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     return review
@@ -4222,7 +4224,7 @@ class RelieveEmployeeRequest(BaseModel):
 @hr_router.post("/admin/employee/{user_id}/relieve")
 async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, request: Request):
     """Formally relieve an employee — a stronger, audited version of the
-    soft-delete below. Only a super admin can do this, and they must
+    soft-delete below. HR Admin or Super Admin can do this, and they must
     re-enter their own password to confirm (this is a one-way, high-impact
     action: the employee stops counting toward attendance, headcount, and
     future payroll once relieved).
@@ -4230,8 +4232,8 @@ async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, reques
     from server import get_current_user, verify_password
     current_user = await get_current_user(request)
 
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only a super admin can relieve an employee")
+    if not has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Only HR Admin or Super Admin can relieve an employee")
 
     if user_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="Cannot relieve your own account")
@@ -4313,12 +4315,12 @@ async def delete_employee(user_id: str, request: Request):
 
 @hr_router.delete("/admin/employee/{user_id}/permanent")
 async def permanently_delete_employee(user_id: str, request: Request):
-    """Permanently delete an employee and all associated data (Super Admin only)"""
+    """Permanently delete an employee and all associated data (HR Admin / Super Admin)"""
     from server import get_current_user
     current_user = await get_current_user(request)
-    
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Super admin access required")
+
+    if not has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Only HR Admin or Super Admin can permanently delete an employee")
     
     # Prevent deleting yourself
     if user_id == current_user.user_id:
@@ -5120,8 +5122,8 @@ async def update_performance_review(review_id: str, request: Request):
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
     
-    # Only the reviewer can edit their review
-    if review.get("reviewer_id") != user.user_id:
+    # The reviewer can edit their own review; HR Admin / Super Admin can edit any.
+    if review.get("reviewer_id") != user.user_id and not has_hr_access(user):
         raise HTTPException(status_code=403, detail="Not authorized to edit this review")
     
     data = await request.json()
@@ -5151,8 +5153,8 @@ async def delete_performance_review(review_id: str, request: Request):
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
     
-    # Only admins or the reviewer can delete
-    if review.get("reviewer_id") != user.user_id and user.role not in ["admin", "super_admin"]:
+    # HR Admin / Super Admin, or the reviewer, can delete
+    if review.get("reviewer_id") != user.user_id and not has_hr_access(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.employee_reviews.delete_one({"review_id": review_id})

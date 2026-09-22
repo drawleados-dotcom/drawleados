@@ -5,7 +5,7 @@ A "Project" is a container of tasks. When a task is added to a project, the
 project name & id are stamped on the task so it auto-appears in the assigned
 user's Operations > My Tasks list with a project badge.
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -397,17 +397,24 @@ async def toggle_pin_project(project_id: str, request: Request, department: str 
 
 
 @projects_router.get("/{project_id}")
-async def get_project(project_id: str, request: Request):
+async def get_project(project_id: str, request: Request, include_tasks: bool = Query(True)):
     from server import get_current_user, db
     user = await get_current_user(request)
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    # No cap — a project's task count isn't bounded, and the existing
-    # our_tasks.project_id index keeps this fast regardless (it narrows to
-    # just this project's docs before the in-memory sort even starts).
-    tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(None)
-    project["tasks"] = tasks
+    if include_tasks:
+        # No cap — a project's task count isn't bounded, and the existing
+        # our_tasks.project_id index keeps this fast regardless (it narrows to
+        # just this project's docs before the in-memory sort even starts).
+        # Callers that only need the project doc itself (e.g. a tab re-reading
+        # `campaigns` before a merge-and-save) pass include_tasks=false to skip
+        # this unbounded fetch — on a project with real history it's the
+        # difference between a couple of ms and a full history round trip.
+        tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(None)
+        project["tasks"] = tasks
+    # Still runs with include_tasks=false: it also filters erp_users by team
+    # visibility, not just tasks (it's a no-op on tasks when there are none).
     project = await _filter_erp_visibility(project, user, db)
     return project
 

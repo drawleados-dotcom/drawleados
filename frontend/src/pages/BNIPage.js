@@ -16,7 +16,7 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
-  RotateCcw, MessageSquare, Package, X, Send,
+  RotateCcw, MessageSquare, Package, X, Send, CheckCircle2, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -179,6 +179,9 @@ export default function BNIPage() {
   const [showRolePlayerImport, setShowRolePlayerImport] = useState(false);
 
   const [memberSearch, setMemberSearch] = useState('');
+  // Members-tab summary cards double as a filter: null shows everyone,
+  // otherwise only members in that One-to-One bucket (see memberOtoBucket).
+  const [memberOtoFilter, setMemberOtoFilter] = useState(null);
   const [categorySearch, setCategorySearch] = useState('');
 
   const today = new Date();
@@ -555,6 +558,22 @@ export default function BNIPage() {
       .filter((o) => o.member_id === memberId)
       .sort((a, b) => (b.meeting_date || '').localeCompare(a.meeting_date || ''));
 
+  // One-to-One bucket for a member, from their most recent entry: "Completed"
+  // or "Scheduled" reflect that entry's status as-is; a member with no
+  // One-to-One yet, or whose latest one is still "To do", both read as
+  // "Yet to do" — same thing the Members table already shows as a bare "+".
+  const memberOtoBucket = (memberId) => {
+    const latest = memberOneToOnes(memberId)[0];
+    if (!latest || latest.meeting_status === 'To do') return 'yet_to_do';
+    return latest.meeting_status === 'Completed' ? 'completed' : 'scheduled';
+  };
+
+  const memberOtoSummary = useMemo(() => {
+    const counts = { completed: 0, scheduled: 0, yet_to_do: 0 };
+    members.forEach((m) => { counts[memberOtoBucket(m.member_id)] += 1; });
+    return counts;
+  }, [members, oneToOnes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openOtoHistory = (member) => {
     setOtoHistoryMember(member);
     setShowOtoHistory(true);
@@ -793,11 +812,15 @@ export default function BNIPage() {
 
   const filteredMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((m) => [
-      m.name, m.business_name, m.category_name, m.role_player_name, m.phone, m.email, m.city,
-    ].some((v) => (v || '').toLowerCase().includes(q)));
-  }, [members, memberSearch]);
+    let list = members;
+    if (memberOtoFilter) list = list.filter((m) => memberOtoBucket(m.member_id) === memberOtoFilter);
+    if (q) {
+      list = list.filter((m) => [
+        m.name, m.business_name, m.category_name, m.role_player_name, m.phone, m.email, m.city,
+      ].some((v) => (v || '').toLowerCase().includes(q)));
+    }
+    return list;
+  }, [members, memberSearch, memberOtoFilter, oneToOnes]); // eslint-disable-line react-hooks/exhaustive-deps
   const pinnedMembers = useMemo(() => filteredMembers.filter((m) => m.pinned), [filteredMembers]);
   const unpinnedMembers = useMemo(() => filteredMembers.filter((m) => !m.pinned), [filteredMembers]);
 
@@ -1285,6 +1308,37 @@ export default function BNIPage() {
           <>
             {activeTab === 'members' && (
               <div className="space-y-3">
+                {/* Summary cards — also the filter: click one to show only that
+                    bucket below, click it again (or Total Members) to clear. */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { key: null, label: 'Total Members', value: members.length, color: textPrimary, icon: Users },
+                    { key: 'completed', label: 'One-to-One Completed', value: memberOtoSummary.completed, color: 'text-[#10b981]', icon: CheckCircle2 },
+                    { key: 'scheduled', label: 'Scheduled', value: memberOtoSummary.scheduled, color: 'text-[#6366f1]', icon: Calendar },
+                    { key: 'yet_to_do', label: 'Yet to do', value: memberOtoSummary.yet_to_do, color: 'text-[#71717a]', icon: Clock },
+                  ].map((c) => {
+                    const active = memberOtoFilter === c.key;
+                    const Icon = c.icon;
+                    return (
+                      <button
+                        type="button"
+                        key={c.label}
+                        onClick={() => setMemberOtoFilter((prev) => (prev === c.key ? null : c.key))}
+                        className={`text-left ${bgCard} border rounded-xl p-4 transition-colors ${
+                          active ? 'border-[#6366f1] ring-2 ring-[#6366f1]/30' : `${borderColor} hover:border-[#6366f1]/40`
+                        }`}
+                        data-testid={`bni-member-summary-${c.key || 'total'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`text-xs ${textSecondary}`}>{c.label}</p>
+                          <Icon className={`h-3.5 w-3.5 shrink-0 ${c.color}`} />
+                        </div>
+                        <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="relative max-w-sm">
                   <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
                   <Input
@@ -1318,7 +1372,9 @@ export default function BNIPage() {
                           <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
                             {members.length === 0
                               ? 'No members yet — click "Add Member" to add the first one.'
-                              : 'No members match your search.'}
+                              : memberOtoFilter && !memberSearch.trim()
+                                ? 'No members in this bucket.'
+                                : 'No members match your search.'}
                           </td>
                         </tr>
                       ) : (

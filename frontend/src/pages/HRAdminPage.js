@@ -100,8 +100,15 @@ export default function HRAdminPage() {
   // Get user's module access
   const moduleAccess = user?.module_access || [];
   
-  // Check if user has HR Manager (limited) or HR Admin (full) access
-  const isHRAdmin = user?.role === 'super_admin' || user?.role === 'admin' || moduleAccess.includes('hr_admin');
+  // Check if user has HR Manager (limited) or HR Admin (full) access.
+  // The account's `role` is the authoritative signal — the backend's own
+  // is_hr_admin()/has_hr_access() already treat role hr_manager/hr_admin as
+  // full HR access, so the frontend has to match that or those accounts see
+  // a read-only page while the API happily accepts their edits (and vice
+  // versa for anything still gated to super_admin only). module_access is
+  // only consulted for an employee who was granted HR Admin via their
+  // designation rather than through their role.
+  const isHRAdmin = ['super_admin', 'admin', 'hr_manager', 'hr_admin'].includes(user?.role) || moduleAccess.includes('hr_admin');
   const isHRManager = moduleAccess.includes('hr_manager') && !isHRAdmin;
   
   // Permission checks based on role
@@ -4735,7 +4742,7 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
           </form>
         </div>
 
-        {/* Super admin password confirmation — required to actually relieve */}
+        {/* HR Admin / Super Admin password confirmation — required to actually relieve */}
         {showRelieveConfirm && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
             <Card className={`${bgCard} border ${borderColor} w-full max-w-sm`}>
@@ -4747,8 +4754,8 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className={`text-sm ${textSecondary}`}>
-                  Relieving {employee.name} on {relieveForm.relieving_date} is permanent from here. Only a super
-                  admin can confirm this — enter your password.
+                  Relieving {employee.name} on {relieveForm.relieving_date} is permanent from here. Only HR Admin
+                  or Super Admin can confirm this — enter your password.
                 </p>
                 <Input
                   type="password"

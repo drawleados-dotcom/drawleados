@@ -62,6 +62,7 @@ from bni_my_gives_routes import bni_my_gives_router, bni_give_recipients_router
 from bni_outreach_routes import bni_outreach_router, bni_outreach_sources_router
 from linkedin_connections_routes import linkedin_connections_router
 from sheets_routes import sheets_router
+from access import has_hr_access
 from org_tree_routes import org_tree_router, init_org_tree_db
 from db_admin_routes import db_admin_router, init_db_admin
 from clients_routes import clients_router, init_clients_db
