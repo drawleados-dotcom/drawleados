@@ -3119,7 +3119,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
                                 onClick={(e) => { e.stopPropagation(); setCompleteSummaryTask(task); }}
                                 data-testid={`complete-btn-${task.task_id}`}
-                                title="Review this task's time, then send it for approval"
+                                title={mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin' ? "Review this task's time, then mark it complete" : "Review this task's time, then send it for approval"}
                               >
                                 <Check className="h-3 w-3 mr-1" /> Complete
                               </Button>
@@ -4657,6 +4657,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           const spanSeconds = h.start
             ? Math.max(0, Math.round(((h.end ? new Date(h.end) : new Date()) - new Date(h.start)) / 1000))
             : 0;
+          // The CEO / Super Admin doesn't need anyone's sign-off on their own
+          // work — Complete marks it done directly instead of detouring
+          // through Send for Approval.
+          const skipApproval = mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin';
           return (
             <div
               className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
@@ -4775,26 +4779,40 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   >
                     Cancel
                   </Button>
-                  <Button
-                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                    onClick={() => {
-                      // Hand straight over to the approval popup, seeded exactly
-                      // as the row's Approve button seeds it (existing approver
-                      // and work link carried across), then drop this one so the
-                      // two modals never stack.
-                      setCompleteSummaryTask(null);
-                      setApprovalTask(t);
-                      setApprovalDraft({
-                        approver_role: t.approval_request?.approver_role || '',
-                        note: '',
-                        work_link: t.approval_request?.work_link || t.work_link || '',
-                      });
-                    }}
-                    data-testid="complete-summary-send-approval"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                    Send to Approve
-                  </Button>
+                  {skipApproval ? (
+                    <Button
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      onClick={() => {
+                        setCompleteSummaryTask(null);
+                        handleStatusChange(t.task_id, 'completed');
+                      }}
+                      data-testid="complete-summary-mark-complete"
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      Mark Complete
+                    </Button>
+                  ) : (
+                    <Button
+                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                      onClick={() => {
+                        // Hand straight over to the approval popup, seeded exactly
+                        // as the row's Approve button seeds it (existing approver
+                        // and work link carried across), then drop this one so the
+                        // two modals never stack.
+                        setCompleteSummaryTask(null);
+                        setApprovalTask(t);
+                        setApprovalDraft({
+                          approver_role: t.approval_request?.approver_role || '',
+                          note: '',
+                          work_link: t.approval_request?.work_link || t.work_link || '',
+                        });
+                      }}
+                      data-testid="complete-summary-send-approval"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                      Send to Approve
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
