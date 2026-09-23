@@ -398,6 +398,105 @@ async def delete_outreach(outreach_id: str, request: Request):
     return {"success": True}
 
 
+# ---------- Reach Out (WhatsApp) — sends the entry's category's live
+# template, with the entry's name filled in, and records which template it
+# was so template performance can be compared afterward. ----------
+
+def _render_template(message: str, name: str) -> str:
+    """Fill a template's name placeholder — {{name}} is the canonical form;
+    the bracket forms are recognized too since that's how people naturally
+    type it when drafting a message ("Hi [Member Name], ...")."""
+    name = name or ""
+    rendered = re.sub(r"\{\{\s*name\s*\}\}", name, message, flags=re.IGNORECASE)
+    rendered = re.sub(r"\[\s*member\s*name\s*\]", name, rendered, flags=re.IGNORECASE)
+    rendered = re.sub(r"\[\s*name\s*\]", name, rendered, flags=re.IGNORECASE)
+    return rendered
+
+
+@bni_outreach_router.post("/{outreach_id}/reach-out")
+async def reach_out(outreach_id: str, request: Request):
+    """Resolve the live template for this entry's category, fill in its name,
+    and log the send — doesn't contact WhatsApp itself; the frontend opens
+    the wa.me link with the returned message."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    entry = await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Outreach entry not found")
+    if not (entry.get("phone") or "").strip():
+        raise HTTPException(status_code=400, detail="This entry has no phone number")
+    if not entry.get("category_id"):
+        raise HTTPException(status_code=400, detail="Set a category on this entry first")
+
+    category = await db.bni_categories.find_one({"category_id": entry["category_id"]}, {"_id": 0, "name": 1, "templates": 1})
+    templates = (category or {}).get("templates") or []
+    live = next((t for t in templates if t.get("is_live")), None)
+    if not live:
+        cat_name = (category or {}).get("name") or "this category"
+        raise HTTPException(status_code=400, detail=f'No live template set for "{cat_name}" yet — add one from Target Category.')
+
+    rendered = _render_template(live["message"], entry.get("name", ""))
+    now = datetime.now(timezone.utc).isoformat()
+    await db.bni_outreach.update_one(
+        {"outreach_id": outreach_id},
+        {
+            "$set": {
+                "template_id_sent": live["template_id"],
+                "template_name_sent": live["name"],
+                "reached_out_at": now,
+            },
+            "$push": {"reach_out_history": {
+                "template_id": live["template_id"], "template_name": live["name"],
+                "sent_at": now, "sent_by": user.user_id,
+            }},
+        },
+    )
+    return {"message": rendered, "phone": entry["phone"], "template_id": live["template_id"], "template_name": live["name"]}
+
+
+@bni_outreach_router.get("/templates/performance")
+async def templates_performance(request: Request, category_id: Optional[str] = None):
+    """How each template is doing, category by category: how many entries it
+    was sent to, and where those entries currently stand in the status
+    pipeline — the comparison for "5 got Template A, 5 got Template B, whose
+    5 moved further"."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    cat_query = {"category_id": category_id} if category_id else {}
+    categories = await db.bni_categories.find(cat_query, {"_id": 0, "category_id": 1, "name": 1, "templates": 1}).to_list(1000)
+    categories = [c for c in categories if c.get("templates")]
+    if not categories:
+        return []
+
+    cat_ids = [c["category_id"] for c in categories]
+    entries = await db.bni_outreach.find(
+        {"category_id": {"$in": cat_ids}, "template_id_sent": {"$nin": [None, ""]}},
+        {"_id": 0, "template_id_sent": 1, "status": 1},
+    ).to_list(20000)
+    by_template: dict = {}
+    for e in entries:
+        row = by_template.setdefault(e["template_id_sent"], {"sent": 0, "by_status": {}})
+        row["sent"] += 1
+        st = e.get("status") or "To do"
+        row["by_status"][st] = row["by_status"].get(st, 0) + 1
+
+    result = []
+    for c in categories:
+        for t in c["templates"]:
+            stats = by_template.get(t["template_id"], {"sent": 0, "by_status": {}})
+            result.append({
+                "category_id": c["category_id"],
+                "category_name": c.get("name", ""),
+                "template_id": t["template_id"],
+                "template_name": t["name"],
+                "is_live": bool(t.get("is_live")),
+                "live_from": t.get("live_from"),
+                "sent": stats["sent"],
+                "by_status": stats["by_status"],
+            })
+    return result
+
+
 # ---------- Sources (Google Sheets that sync into the outreach list) ----------
 
 class OutreachSourceCreate(BaseModel):

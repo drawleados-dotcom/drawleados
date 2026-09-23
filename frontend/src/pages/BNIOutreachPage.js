@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Combobox } from '../components/ui/combobox';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Textarea } from '../components/ui/textarea';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
@@ -77,6 +77,17 @@ const tagColor = (seed) => {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff;
   return TAG_PALETTE[Math.abs(h) % TAG_PALETTE.length];
+};
+
+// Client-side preview only — matches the server's substitution in
+// bni_outreach_routes.py._render_template. The actual send always asks the
+// server to render it fresh, so this is just for what-you'll-send preview.
+const renderTemplatePreview = (message, name) => {
+  const n = name || '';
+  return String(message || '')
+    .replace(/\{\{\s*name\s*\}\}/gi, n)
+    .replace(/\[\s*member\s*name\s*\]/gi, n)
+    .replace(/\[\s*name\s*\]/gi, n);
 };
 
 const typeTriggerColor = (t) => {
@@ -148,6 +159,8 @@ const BNIOutreachPage = () => {
   const [tgtGroup, setTgtGroup] = useState('all');
   const [partSearch, setPartSearch] = useState('');
   const [partGroup, setPartGroup] = useState('all');
+  // WhatsApp templates modal — which Target Category is currently being managed.
+  const [templatesFor, setTemplatesFor] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -335,6 +348,32 @@ const BNIOutreachPage = () => {
       load();
     } catch (error) { toast.error('Failed to delete outreach entry'); }
   };
+  // Reach Out — asks the server for this entry's category's live template
+  // (name already filled in) and hands it to WhatsApp via a wa.me link.
+  const [reachingOutId, setReachingOutId] = useState(null);
+  const reachOut = async (o) => {
+    setReachingOutId(o.outreach_id);
+    try {
+      const res = await api.post(`/bni/outreach/${o.outreach_id}/reach-out`);
+      const digits = (o.phone || '').replace(/\D/g, '');
+      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(res.data.message)}`, '_blank', 'noopener,noreferrer');
+      toast.success(`Opened WhatsApp with "${res.data.template_name}"`);
+      const sentAt = new Date().toISOString();
+      const patch = {
+        template_id_sent: res.data.template_id, template_name_sent: res.data.template_name, reached_out_at: sentAt,
+      };
+      const appendHistory = (entry) => ({
+        ...entry, ...patch,
+        reach_out_history: [...(entry.reach_out_history || []), { template_id: res.data.template_id, template_name: res.data.template_name, sent_at: sentAt }],
+      });
+      setOutreach((prev) => prev.map((e) => (e.outreach_id === o.outreach_id ? appendHistory(e) : e)));
+      setViewEntry((prev) => (prev && prev.outreach_id === o.outreach_id ? appendHistory(prev) : prev));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Could not reach out');
+    } finally {
+      setReachingOutId(null);
+    }
+  };
   const importRows = async (rows) => {
     const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const results = await Promise.allSettled(rows.map((r) => {
@@ -477,7 +516,7 @@ const BNIOutreachPage = () => {
     <Badge className={`${tagColor(c.category_id).bg} ${tagColor(c.category_id).text} border ${tagColor(c.category_id).border} font-semibold`}>{c.name}</Badge>
   );
 
-  const readOnlyCategoryTable = (list, emptyMsg) => (
+  const readOnlyCategoryTable = (list, emptyMsg, onTemplates) => (
     <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -486,19 +525,32 @@ const BNIOutreachPage = () => {
               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category Name</th>
               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+              {onTemplates && <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>WhatsApp Templates</th>}
             </tr>
           </thead>
           <tbody className={`divide-y ${borderColor}`}>
             {list.length === 0 ? (
-              <tr><td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>{emptyMsg}</td></tr>
+              <tr><td colSpan={onTemplates ? 4 : 3} className={`px-4 py-8 text-center ${textSecondary}`}>{emptyMsg}</td></tr>
             ) : (
-              list.map((c) => (
-                <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                  <td className="px-4 py-3">{categoryTag(c)}</td>
-                  <td className={`px-4 py-3 ${textSecondary}`}>{c.group || '—'}</td>
-                  <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
-                </tr>
-              ))
+              list.map((c) => {
+                const templates = c.templates || [];
+                const live = templates.find((t) => t.is_live);
+                return (
+                  <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                    <td className="px-4 py-3">{categoryTag(c)}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>{c.group || '—'}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
+                    {onTemplates && (
+                      <td className="px-4 py-3">
+                        <Button variant="outline" size="sm" onClick={() => onTemplates(c)} data-testid={`bni-category-templates-${c.category_id}`}>
+                          <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                          {templates.length} Template{templates.length === 1 ? '' : 's'}{live ? ` · Live: ${live.name}` : ''}
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -611,23 +663,23 @@ const BNIOutreachPage = () => {
                 </div>
               <div className={`hidden md:block ${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm table-fixed">
                     <thead className={bgSecondary}>
                       <tr>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Brand Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone 2</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[160px]`}>Brand Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[150px]`}>Chapter Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[170px]`}>Email</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[150px]`}>Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[90px]`}>Profile Link</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[120px]`}>Phone</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[120px]`}>Phone 2</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Website</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[130px]`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[110px]`}>Group</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[110px]`}>Source</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[160px]`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
@@ -639,14 +691,14 @@ const BNIOutreachPage = () => {
                         </tr>
                       ) : (
                         visibleOutreach.map((o) => (
-                          <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.name}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.brand_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.chapter_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.email || '—'}</td>
+                          <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors align-top`}>
+                            <td className={`px-4 py-3 font-medium ${textPrimary} line-clamp-2 break-words`}>{o.name}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.brand_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.chapter_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.email || '—'}</td>
                             <td className="px-4 py-3">
                               <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
-                                <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
+                                <SelectTrigger className={`w-full ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -656,31 +708,42 @@ const BNIOutreachPage = () => {
                             </td>
                             <td className="px-4 py-3">
                               {o.profile_link ? (
-                                <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
-                                  <LinkIcon className="h-3.5 w-3.5" /> View
-                                </a>
-                              ) : '—'}
+                                <Button asChild variant="outline" size="sm" className="text-[#6366f1]">
+                                  <a href={o.profile_link} target="_blank" rel="noopener noreferrer" data-testid={`bni-outreach-profile-${o.outreach_id}`}>
+                                    <LinkIcon className="h-3.5 w-3.5 mr-1" /> View
+                                  </a>
+                                </Button>
+                              ) : <span className={textSecondary}>—</span>}
                             </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone2 || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.group || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.phone || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.phone2 || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.website || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.location || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.category_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.group || '—'}</td>
                             <td className="px-4 py-3">
                               {o.source_name ? (
-                                <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40">{o.source_name}</Badge>
+                                <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40 line-clamp-2 break-words">{o.source_name}</Badge>
                               ) : <span className={textSecondary}>—</span>}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)} data-testid={`bni-outreach-view-${o.outreach_id}`}>
+                              <div className="flex flex-wrap gap-1">
+                                <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)} title="View details" data-testid={`bni-outreach-view-${o.outreach_id}`}>
                                   <Eye className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => openEdit(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
+                                <Button variant="ghost" size="sm" onClick={() => openEdit(o)} title="Edit" data-testid={`bni-outreach-edit-${o.outreach_id}`}>
                                   <Pencil className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)} data-testid={`bni-outreach-delete-${o.outreach_id}`}>
+                                <Button
+                                  variant="ghost" size="sm" className="text-[#10b981]"
+                                  onClick={() => reachOut(o)}
+                                  disabled={reachingOutId === o.outreach_id || !o.phone}
+                                  title={!o.phone ? 'No phone number on this entry' : 'Reach Out on WhatsApp'}
+                                  data-testid={`bni-outreach-reachout-${o.outreach_id}`}
+                                >
+                                  <MessageCircle className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)} title="Delete" data-testid={`bni-outreach-delete-${o.outreach_id}`}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -878,7 +941,8 @@ const BNIOutreachPage = () => {
                 </div>
                 {readOnlyCategoryTable(
                   filterCats(categories.filter((c) => c.target_type === 'target'), tgtSearch, tgtGroup),
-                  'No target categories yet — mark categories as "Target Category" in the Category tab.'
+                  'No target categories yet — mark categories as "Target Category" in the Category tab.',
+                  setTemplatesFor
                 )}
               </div>
             )}
@@ -1042,7 +1106,7 @@ const BNIOutreachPage = () => {
               <DialogTitle className={textPrimary}>{viewEntry?.name}</DialogTitle>
             </DialogHeader>
             <div className={`inline-flex rounded-lg border ${borderColor} p-1 ${bgSecondary} w-fit`}>
-              {[{ k: 'details', l: 'Details' }, { k: 'remarks', l: 'Remarks' }].map((t) => (
+              {[{ k: 'details', l: 'Details' }, { k: 'remarks', l: 'Remarks' }, { k: 'whatsapp', l: 'WhatsApp' }].map((t) => (
                 <button
                   key={t.k}
                   onClick={() => setViewTab(t.k)}
@@ -1109,6 +1173,52 @@ const BNIOutreachPage = () => {
                 </div>
               </div>
             )}
+            {viewEntry && viewTab === 'whatsapp' && (() => {
+              const viewCategory = categories.find((c) => c.category_id === viewEntry.category_id);
+              const liveTemplate = (viewCategory?.templates || []).find((t) => t.is_live);
+              const history = [...(viewEntry.reach_out_history || [])].reverse();
+              return (
+                <div className="space-y-3">
+                  {!viewEntry.category_id ? (
+                    <p className={`text-sm ${textSecondary} text-center py-4`}>Set a category on this entry first — templates live on the category.</p>
+                  ) : !liveTemplate ? (
+                    <div className="text-center py-4 space-y-2">
+                      <p className={`text-sm ${textSecondary}`}>No live template set for "{viewCategory?.name || viewEntry.category_name}" yet.</p>
+                      {viewCategory && (
+                        <Button variant="outline" size="sm" onClick={() => { setShowView(false); setTemplatesFor(viewCategory); }} data-testid="bni-outreach-view-manage-templates">
+                          Manage Templates
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                        <p className={`text-[11px] font-medium uppercase ${textSecondary}`}>Live template: {liveTemplate.name}</p>
+                        <p className={`text-sm ${textPrimary} whitespace-pre-wrap mt-1`}>{renderTemplatePreview(liveTemplate.message, viewEntry.name)}</p>
+                      </div>
+                      <Button
+                        onClick={() => reachOut(viewEntry)}
+                        disabled={reachingOutId === viewEntry.outreach_id || !viewEntry.phone}
+                        className="w-full bg-[#10b981] hover:bg-[#0d9668] text-white"
+                        data-testid="bni-outreach-view-reachout"
+                      >
+                        <MessageCircle className="h-4 w-4 mr-2" /> {viewEntry.phone ? 'Send via WhatsApp' : 'No phone number on this entry'}
+                      </Button>
+                    </>
+                  )}
+                  {history.length > 0 && (
+                    <div className={`border-t ${borderColor} pt-2 space-y-1`}>
+                      <p className={`text-[11px] font-medium uppercase ${textSecondary}`}>Sent before</p>
+                      {history.map((h, i) => (
+                        <p key={i} className={`text-xs ${textSecondary}`}>
+                          {h.template_name} — {new Date(h.sent_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </DialogContent>
         </Dialog>
 
@@ -1197,9 +1307,238 @@ const BNIOutreachPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {templatesFor && (
+          <CategoryTemplatesModal
+            category={templatesFor}
+            onClose={() => setTemplatesFor(null)}
+            onChanged={(nextTemplates) => {
+              setCategories((prev) => prev.map((c) => (c.category_id === templatesFor.category_id ? { ...c, templates: nextTemplates } : c)));
+              setTemplatesFor((prev) => (prev ? { ...prev, templates: nextTemplates } : prev));
+            }}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
       </div>
     </Layout>
   );
 };
+
+// Manages a Target Category's WhatsApp templates: add / edit / delete, which
+// one is Live (and since when), and how each template has performed so far
+// (sent count + where those prospects' status stands today) — the A/B
+// comparison for "5 got Template A, 5 got Template B".
+function CategoryTemplatesModal({ category, onClose, onChanged, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [templates, setTemplates] = useState(category.templates || []);
+  const [perf, setPerf] = useState([]);
+  const [perfLoading, setPerfLoading] = useState(true);
+  const [addForm, setAddForm] = useState({ name: '', message: '' });
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', message: '' });
+  const [saving, setSaving] = useState(false);
+  const [liveFromDraft, setLiveFromDraft] = useState({}); // template_id -> date string
+  const addTextareaRef = useRef(null);
+  const editTextareaRef = useRef(null);
+
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+
+  const loadPerf = useCallback(async () => {
+    setPerfLoading(true);
+    try {
+      const res = await api.get('/bni/outreach/templates/performance', { params: { category_id: category.category_id } });
+      setPerf(res.data || []);
+    } catch (e) { /* silent — performance is a nice-to-have, not blocking */ } finally { setPerfLoading(false); }
+  }, [category.category_id]);
+
+  useEffect(() => { loadPerf(); }, [loadPerf]);
+
+  // Inserts {{name}} at the cursor position in whichever textarea is passed.
+  const insertPlaceholder = (ref, setForm) => {
+    const el = ref.current;
+    const token = '{{name}}';
+    if (!el) { setForm((f) => ({ ...f, message: `${f.message}${token}` })); return; }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setForm((f) => ({ ...f, message: f.message.slice(0, start) + token + f.message.slice(end) }));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + token.length, start + token.length); });
+  };
+
+  const addTemplate = async () => {
+    if (!addForm.name.trim()) { toast.error('Template name is required'); return; }
+    if (!addForm.message.trim()) { toast.error('Template message is required'); return; }
+    setAdding(true);
+    try {
+      const res = await api.post(`/bni/categories/${category.category_id}/templates`, addForm);
+      const next = [...templates, res.data];
+      setTemplates(next);
+      onChanged(next);
+      setAddForm({ name: '', message: '' });
+      toast.success('Template added');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to add template');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const startEdit = (t) => { setEditingId(t.template_id); setEditForm({ name: t.name, message: t.message }); };
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { toast.error('Template name is required'); return; }
+    if (!editForm.message.trim()) { toast.error('Template message is required'); return; }
+    setSaving(true);
+    try {
+      const res = await api.put(`/bni/categories/${category.category_id}/templates/${editingId}`, editForm);
+      const next = templates.map((t) => (t.template_id === editingId ? { ...t, ...res.data } : t));
+      setTemplates(next);
+      onChanged(next);
+      setEditingId(null);
+      toast.success('Template updated');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update template');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeTemplate = async (templateId) => {
+    if (!window.confirm('Delete this template?')) return;
+    try {
+      await api.delete(`/bni/categories/${category.category_id}/templates/${templateId}`);
+      const next = templates.filter((t) => t.template_id !== templateId);
+      setTemplates(next);
+      onChanged(next);
+      toast.success('Template deleted');
+    } catch (e) {
+      toast.error('Failed to delete template');
+    }
+  };
+
+  const makeLive = async (templateId) => {
+    const liveFrom = liveFromDraft[templateId] || todayISO();
+    try {
+      const res = await api.post(`/bni/categories/${category.category_id}/templates/${templateId}/make-live`, { live_from: liveFrom });
+      setTemplates(res.data.templates);
+      onChanged(res.data.templates);
+      toast.success('This template is now live');
+      loadPerf();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to make live');
+    }
+  };
+
+  const unliveTemplate = async (templateId) => {
+    try {
+      const res = await api.post(`/bni/categories/${category.category_id}/templates/${templateId}/unlive`);
+      const next = res.data.templates || [];
+      setTemplates(next);
+      onChanged(next);
+      toast.success('Template taken off live');
+    } catch (e) {
+      toast.error('Failed to update');
+    }
+  };
+
+  const perfFor = (templateId) => perf.find((p) => p.template_id === templateId);
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className={`${bgCard} max-w-2xl max-h-[85vh] overflow-y-auto`} data-testid="bni-templates-modal">
+        <DialogHeader>
+          <DialogTitle className={textPrimary}>WhatsApp Templates — {category.name}</DialogTitle>
+        </DialogHeader>
+        <p className={`text-xs ${textSecondary}`}>
+          Reach Out on the Outreach tab always sends whichever template is Live here. Use <code>{'{{name}}'}</code>{' '}
+          anywhere in the text (or the "Insert Name" button) and it's filled in with each prospect's own name.
+        </p>
+
+        <div className="space-y-3">
+          {templates.length === 0 && <p className={`text-sm ${textSecondary} text-center py-4`}>No templates yet — add one below.</p>}
+          {templates.map((t) => {
+            const stats = perfFor(t.template_id);
+            const isEditing = editingId === t.template_id;
+            return (
+              <div key={t.template_id} className={`border rounded-lg p-3 space-y-2 ${t.is_live ? 'border-[#10b981]' : borderColor}`} data-testid={`bni-template-${t.template_id}`}>
+                {isEditing ? (
+                  <>
+                    <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="Template name" data-testid={`bni-template-edit-name-${t.template_id}`} />
+                    <div className="flex justify-end">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => insertPlaceholder(editTextareaRef, setEditForm)}>+ Insert Name</Button>
+                    </div>
+                    <Textarea ref={editTextareaRef} value={editForm.message} onChange={(e) => setEditForm({ ...editForm, message: e.target.value })} rows={4} className={`${bgSecondary} border ${borderColor}`} data-testid={`bni-template-edit-message-${t.template_id}`} />
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button type="button" size="sm" onClick={saveEdit} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid={`bni-template-edit-save-${t.template_id}`}>{saving ? 'Saving…' : 'Save'}</Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`font-semibold ${textPrimary}`}>{t.name}</p>
+                          {t.is_live && <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40">Live from {t.live_from}</Badge>}
+                        </div>
+                        <p className={`text-sm ${textSecondary} whitespace-pre-wrap mt-1`}>{t.message}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => startEdit(t)} data-testid={`bni-template-edit-${t.template_id}`}><Pencil className="h-4 w-4" /></Button>
+                        <Button type="button" variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => removeTemplate(t.template_id)} data-testid={`bni-template-delete-${t.template_id}`}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {t.is_live ? (
+                        <Button type="button" variant="outline" size="sm" onClick={() => unliveTemplate(t.template_id)} data-testid={`bni-template-unlive-${t.template_id}`}>Take off Live</Button>
+                      ) : (
+                        <>
+                          <Input
+                            type="date"
+                            value={liveFromDraft[t.template_id] || todayISO()}
+                            onChange={(e) => setLiveFromDraft((d) => ({ ...d, [t.template_id]: e.target.value }))}
+                            className={`h-8 w-40 text-xs ${bgSecondary} border ${borderColor}`}
+                            data-testid={`bni-template-live-from-${t.template_id}`}
+                          />
+                          <Button type="button" size="sm" onClick={() => makeLive(t.template_id)} className="bg-[#10b981] hover:bg-[#0d9668] text-white" data-testid={`bni-template-make-live-${t.template_id}`}>
+                            Make Live
+                          </Button>
+                        </>
+                      )}
+                      <span className={`text-xs ${textSecondary}`}>
+                        {perfLoading ? 'Loading performance…' : !stats || stats.sent === 0 ? 'Not sent yet'
+                          : `Sent to ${stats.sent} · ${Object.entries(stats.by_status).map(([s, n]) => `${s}: ${n}`).join(', ')}`}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className={`border-t ${borderColor} pt-3 space-y-2`}>
+          <p className={`text-xs font-medium uppercase ${textSecondary}`}>Add a template</p>
+          <Input value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="Template name (e.g. Intro A)" data-testid="bni-template-add-name" />
+          <div className="flex justify-end">
+            <Button type="button" variant="ghost" size="sm" onClick={() => insertPlaceholder(addTextareaRef, setAddForm)}>+ Insert Name</Button>
+          </div>
+          <Textarea ref={addTextareaRef} value={addForm.message} onChange={(e) => setAddForm({ ...addForm, message: e.target.value })} rows={4} placeholder="Hi {{name}}, ..." className={`${bgSecondary} border ${borderColor}`} data-testid="bni-template-add-message" />
+          <div className="flex justify-end">
+            <Button type="button" onClick={addTemplate} disabled={adding} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-template-add-save">
+              {adding ? 'Adding…' : 'Add Template'}
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default BNIOutreachPage;

@@ -22,7 +22,9 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 bni_settings_router = APIRouter(prefix="/bni/settings", tags=["bni"])
 bni_categories_router = APIRouter(prefix="/bni/categories", tags=["bni"])
@@ -231,6 +233,134 @@ async def update_bni_category(category_id: str, payload: BNICategoryUpdate, requ
         update_data["target_type"] = payload.target_type
 
     await db.bni_categories.update_one({"category_id": category_id}, {"$set": update_data})
+    return await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0})
+
+
+# ---------- WhatsApp reach-out templates (per category, mainly used on Target
+# Category) ----------
+# Each category can hold several message templates; at most one is "live" at
+# a time (with the date it went live) — the Outreach page's Reach Out action
+# always sends whichever one is live for that entry's category. Switching
+# which template is live is how you A/B two templates against each other:
+# reach out to a batch with Template A live, flip to Template B, reach out to
+# the next batch, then compare how each group's status moved.
+
+class BNITemplateCreate(BaseModel):
+    name: str
+    message: str
+
+
+class BNITemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    message: Optional[str] = None
+
+
+class BNITemplateMakeLive(BaseModel):
+    live_from: Optional[str] = None  # YYYY-MM-DD, defaults to today (IST)
+
+
+@bni_categories_router.post("/{category_id}/templates")
+async def create_bni_template(category_id: str, payload: BNITemplateCreate, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    category = await db.bni_categories.find_one({"category_id": category_id})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    name = (payload.name or "").strip()
+    message = (payload.message or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Template name is required")
+    if not message:
+        raise HTTPException(status_code=400, detail="Template message is required")
+    now = datetime.now(timezone.utc).isoformat()
+    template = {
+        "template_id": f"bnitpl_{uuid.uuid4().hex[:10]}",
+        "name": name,
+        "message": message,
+        "is_live": False,
+        "live_from": None,
+        "created_by": user.user_id,
+        "created_at": now,
+    }
+    await db.bni_categories.update_one({"category_id": category_id}, {"$push": {"templates": template}})
+    return template
+
+
+@bni_categories_router.put("/{category_id}/templates/{template_id}")
+async def update_bni_template(category_id: str, template_id: str, payload: BNITemplateUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    category = await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0, "templates": 1})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    template = next((t for t in (category.get("templates") or []) if t.get("template_id") == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Template name is required")
+        template["name"] = name
+    if payload.message is not None:
+        message = payload.message.strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="Template message is required")
+        template["message"] = message
+    await db.bni_categories.update_one(
+        {"category_id": category_id, "templates.template_id": template_id},
+        {"$set": {"templates.$.name": template["name"], "templates.$.message": template["message"]}},
+    )
+    return template
+
+
+@bni_categories_router.delete("/{category_id}/templates/{template_id}")
+async def delete_bni_template(category_id: str, template_id: str, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    result = await db.bni_categories.update_one(
+        {"category_id": category_id}, {"$pull": {"templates": {"template_id": template_id}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"message": "Template deleted"}
+
+
+@bni_categories_router.post("/{category_id}/templates/{template_id}/make-live")
+async def make_bni_template_live(category_id: str, template_id: str, payload: BNITemplateMakeLive, request: Request):
+    """Make this the one live template for the category — every other
+    template on it goes back to not-live in the same update."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    category = await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0, "templates": 1})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    templates = category.get("templates") or []
+    if not any(t.get("template_id") == template_id for t in templates):
+        raise HTTPException(status_code=404, detail="Template not found")
+    live_from = payload.live_from or datetime.now(IST).date().isoformat()
+    try:
+        datetime.strptime(live_from, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="live_from must be YYYY-MM-DD")
+    for t in templates:
+        t["is_live"] = t["template_id"] == template_id
+        t["live_from"] = live_from if t["template_id"] == template_id else t.get("live_from")
+    await db.bni_categories.update_one({"category_id": category_id}, {"$set": {"templates": templates}})
+    return {"templates": templates}
+
+
+@bni_categories_router.post("/{category_id}/templates/{template_id}/unlive")
+async def unlive_bni_template(category_id: str, template_id: str, request: Request):
+    """Take this template off live without picking a replacement — the
+    category is left with no live template until one is made live again."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    result = await db.bni_categories.update_one(
+        {"category_id": category_id, "templates.template_id": template_id},
+        {"$set": {"templates.$.is_live": False}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
     return await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0})
 
 
