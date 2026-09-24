@@ -382,6 +382,16 @@ async def create_task(task_data: TaskCreate, request: Request):
         
         await db.our_tasks.insert_one(task)
         task.pop("_id", None)
+        # Logged explicitly (not just synthesised from created_at) so the
+        # timeline still has its origin story even after the task itself is
+        # later deleted.
+        await _log_task_event(
+            task_id, "created", user, f'Task created — "{task_data.task_name}"',
+            {
+                "assigned_to": await _user_name(db, task["assigned_to"]),
+                "due_date": task_data.due_date, "due_time": task_data.due_time, "type": task_data.type,
+            },
+        )
 
         if task["assigned_to"] and task["assigned_to"] != user.user_id:
             try:
@@ -636,6 +646,52 @@ async def get_task(task_id: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Fields worth a timeline entry when a full edit (PUT) changes them — label
+# used in the event's summary/details. Anything not listed here (e.g.
+# internal bookkeeping fields) is silently skipped.
+TRACKED_TASK_FIELDS = {
+    "task_name": "Task name", "description": "Description", "due_date": "Due date",
+    "due_time": "Due time", "priority": "Priority", "status": "Status",
+    "work_link": "Work link", "assigned_to": "Assigned to",
+}
+
+
+async def _user_name(db, user_id: Optional[str]) -> Optional[str]:
+    if not user_id:
+        return None
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "name": 1})
+    return (u or {}).get("name") or user_id
+
+
+def _fmt_change(v) -> str:
+    return "—" if v in (None, "") else str(v)
+
+
+async def _log_task_edit(db, task_id: str, before: dict, update_dict: dict, user) -> None:
+    """Diff a PUT's changes against the task's prior state and log one
+    timeline event covering all of them — a reassignment gets its own
+    readable headline; everything else is summarised as "<field> changed"."""
+    changes = {
+        field: {"label": label, "from": before.get(field), "to": update_dict[field]}
+        for field, label in TRACKED_TASK_FIELDS.items()
+        if field in update_dict and update_dict[field] != before.get(field)
+    }
+    if not changes:
+        return
+    parts, details = [], {}
+    for field, ch in changes.items():
+        if field == "assigned_to":
+            from_name = await _user_name(db, ch["from"])
+            to_name = await _user_name(db, ch["to"])
+            parts.append(f"Reassigned to {to_name or '—'}" + (f" (from {from_name})" if from_name else ""))
+            details["assigned_to"] = f"{from_name or '—'} → {to_name or '—'}"
+        else:
+            parts.append(f"{ch['label']} changed")
+            details[field] = f"{_fmt_change(ch['from'])} → {_fmt_change(ch['to'])}"
+    kind = "reassigned" if list(changes.keys()) == ["assigned_to"] else "edited"
+    await _log_task_event(task_id, kind, user, "; ".join(parts), details)
+
+
 # Update a task
 @our_tasks_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
@@ -685,9 +741,10 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
             {"task_id": task_id},
             {"$set": update_dict}
         )
-        
+        await _log_task_edit(db, task_id, task, update_dict, user)
+
         updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
-        
+
         # Add user names
         if updated.get("assigned_to"):
             assigned_user = await db.users.find_one({"user_id": updated["assigned_to"]}, {"name": 1, "_id": 0})
@@ -698,7 +755,7 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         if updated.get("created_by"):
             creator = await db.users.find_one({"user_id": updated["created_by"]}, {"name": 1, "_id": 0})
             updated["created_by_name"] = creator.get("name") if creator else "Unknown"
-        
+
         return updated
     except HTTPException:
         raise
@@ -723,6 +780,11 @@ async def delete_task(task_id: str, request: Request):
         if not (is_admin or is_assignee):
             raise HTTPException(status_code=403, detail="Only the assignee or an admin can delete this task")
         
+        assignee_name = await _user_name(db, task.get("assigned_to"))
+        await _log_task_event(
+            task_id, "deleted", user, f'Task deleted — "{task.get("task_name", "")}"',
+            {"assigned_to": assignee_name, "status_at_deletion": task.get("status")},
+        )
         await db.our_tasks.delete_one({"task_id": task_id})
         # Bridge: also delete the linked meeting (best-effort).
         linked_meeting_id = task.get("linked_meeting_id")
@@ -769,6 +831,12 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
             {"task_id": task_id},
             {"$set": update_fields}
         )
+        if status_data.status != task.get("status"):
+            await _log_task_event(
+                task_id, "status_changed", user,
+                f"Status changed: {_fmt_change(task.get('status'))} → {_fmt_change(status_data.status)}",
+                {"from": task.get("status"), "to": status_data.status},
+            )
 
         # Bridge: mirror status to the linked meeting (completed↔completed, else scheduled).
         linked_meeting_id = task.get("linked_meeting_id")
@@ -1784,8 +1852,11 @@ async def get_task_timeline(task_id: str, request: Request):
 
     Only Super Admin / Admin can view this — the frontend also gates the
     eye-on-clock icon to super_admin. Events are synthesised from existing
-    task fields (created_at, updated_at, approval_request) plus the dedicated
-    `task_events` collection which the write paths append to.
+    task fields (created_at, approval_request) plus the dedicated
+    `task_events` collection, which every write path (edit, reassign, status
+    change, delete) appends a specific entry to. A since-deleted task still
+    has a timeline — its "deleted" event and everything before it — as long
+    as anything was ever logged for its task_id.
     """
     from server import get_current_user, db
     user = await get_current_user(request)
@@ -1794,53 +1865,51 @@ async def get_task_timeline(task_id: str, request: Request):
         raise HTTPException(status_code=403, detail="Timeline is visible to Super Admin only")
 
     task = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
-    if not task:
+    task_events = await db.task_events.find({"task_id": task_id}, {"_id": 0}).sort("at", 1).to_list(500)
+    if not task and not task_events:
         raise HTTPException(status_code=404, detail="Task not found")
-
+    logged_kinds = {ev.get("kind") for ev in task_events}
     events = []
 
-    # 1) Synthesised events from the task document itself.
-    if task.get("created_at"):
-        events.append({
-            "kind": "created",
-            "at": task["created_at"],
-            "by": task.get("created_by_name") or task.get("created_by") or "—",
-            "summary": f"Task created — \"{task.get('task_name','')}\"",
-            "details": {
-                "assigned_to": task.get("assigned_to_name"),
-                "due_date": task.get("due_date"),
-                "due_time": task.get("due_time"),
-                "type": task.get("type"),
-            },
-        })
-    ar = task.get("approval_request") or {}
-    if ar.get("requested_at"):
-        events.append({
-            "kind": "approval_requested",
-            "at": ar["requested_at"],
-            "by": ar.get("requested_by_name") or ar.get("requested_by") or "—",
-            "summary": f"Approval requested → {ar.get('approver_role') or 'operations'}",
-            "details": {"note": ar.get("note"), "status": ar.get("status")},
-        })
-    if ar.get("decided_at"):
-        events.append({
-            "kind": "approval_decided",
-            "at": ar["decided_at"],
-            "by": ar.get("decided_by_name") or ar.get("decided_by") or "—",
-            "summary": f"Approval {ar.get('status') or 'decided'} by {ar.get('approver_role') or 'operations'}",
-            "details": {"comment": ar.get("decision_comment"), "status": ar.get("status")},
-        })
-    if task.get("updated_at") and task["updated_at"] != task.get("created_at"):
-        events.append({
-            "kind": "updated",
-            "at": task["updated_at"],
-            "by": "—",
-            "summary": "Task updated",
-            "details": {},
-        })
+    if task:
+        # Synthesised events from the task document itself. "created" is only
+        # synthesised here for tasks that predate explicit create-time
+        # logging — new ones already have it in task_events. Edits,
+        # reassignments, status changes and deletion always come from there.
+        if task.get("created_at") and "created" not in logged_kinds:
+            events.append({
+                "kind": "created",
+                "at": task["created_at"],
+                "by": task.get("created_by_name") or task.get("created_by") or "—",
+                "summary": f"Task created — \"{task.get('task_name','')}\"",
+                "details": {
+                    "assigned_to": task.get("assigned_to_name"),
+                    "due_date": task.get("due_date"),
+                    "due_time": task.get("due_time"),
+                    "type": task.get("type"),
+                },
+            })
+        ar = task.get("approval_request") or {}
+        if ar.get("requested_at"):
+            events.append({
+                "kind": "approval_requested",
+                "at": ar["requested_at"],
+                "by": ar.get("requested_by_name") or ar.get("requested_by") or "—",
+                "summary": f"Approval requested → {ar.get('approver_role') or 'operations'}",
+                "details": {"note": ar.get("note"), "status": ar.get("status")},
+            })
+        if ar.get("decided_at"):
+            events.append({
+                "kind": "approval_decided",
+                "at": ar["decided_at"],
+                "by": ar.get("decided_by_name") or ar.get("decided_by") or "—",
+                "summary": f"Approval {ar.get('status') or 'decided'} by {ar.get('approver_role') or 'operations'}",
+                "details": {"comment": ar.get("decision_comment"), "status": ar.get("status")},
+            })
 
-    # Dedicated event log entries.
-    async for ev in db.task_events.find({"task_id": task_id}, {"_id": 0}).sort("at", 1):
+    # Dedicated event log entries — created (new tasks) / edited / reassigned
+    # / status_changed / deleted, everything the write paths log explicitly.
+    for ev in task_events:
         # Normalise the timestamp to ISO string so the merge sort below
         # doesn't blow up comparing str vs datetime.
         v = ev.get("at")
@@ -1850,7 +1919,7 @@ async def get_task_timeline(task_id: str, request: Request):
 
     # Sort ascending and return.
     events.sort(key=lambda e: str(e.get("at") or ""))
-    return {"task_id": task_id, "events": events}
+    return {"task_id": task_id, "task_deleted": not task, "events": events}
 
 
 async def _log_task_event(task_id: str, kind: str, user, summary: str, details: Optional[dict] = None):

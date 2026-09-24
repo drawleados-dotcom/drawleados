@@ -4029,14 +4029,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     <ol className="relative border-l-2 border-amber-500/30 ml-3 space-y-3 py-1">
                       {timelineEvents.map((ev, idx) => {
                         const at = ev.at ? new Date(ev.at) : null;
-                        const atStr = at && !isNaN(at.getTime())
-                          ? at.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
-                          : (ev.at || '—');
+                        const validAt = at && !isNaN(at.getTime());
+                        const dateStr = validAt ? at.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (ev.at || '—');
+                        const dayStr = validAt ? at.toLocaleDateString('en-IN', { weekday: 'long' }) : '';
+                        const timeStr = validAt ? at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
                         const kindColor =
                           ev.kind === 'created' ? 'bg-emerald-500'
+                          : ev.kind === 'edited' ? 'bg-blue-500'
+                          : ev.kind === 'reassigned' ? 'bg-indigo-500'
+                          : ev.kind === 'status_changed' ? 'bg-cyan-500'
                           : ev.kind === 'updated' ? 'bg-blue-500'
                           : ev.kind === 'approval_requested' ? 'bg-amber-500'
                           : ev.kind === 'approval_decided' ? 'bg-purple-500'
+                          : ev.kind === 'deleted' ? 'bg-red-500'
                           : 'bg-gray-400';
                         return (
                           <li key={idx} className="ml-4 relative" data-testid={`timeline-event-${idx}`}>
@@ -4044,7 +4049,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
                               <div className="flex items-center justify-between flex-wrap gap-1">
                                 <p className={`text-xs font-semibold ${textPrimary}`}>{ev.summary || ev.kind}</p>
-                                <p className={`text-[10px] ${textSecondary}`}>{atStr}</p>
+                                <p className={`text-[10px] ${textSecondary} text-right`}>{dateStr}{dayStr && ` · ${dayStr}`}{timeStr && ` · ${timeStr}`}</p>
                               </div>
                               <p className={`text-[11px] ${textSecondary} mt-0.5`}>
                                 <span className="font-medium">{ev.by_name || ev.by || '—'}</span>

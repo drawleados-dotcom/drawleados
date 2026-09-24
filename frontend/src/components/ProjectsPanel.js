@@ -138,6 +138,24 @@ export default function ProjectsPanel({
   const [savingTime, setSavingTime] = useState(false);
   const [timeEditOpen, setTimeEditOpen] = useState(false);
   const [timeEditDraft, setTimeEditDraft] = useState({ date: '', start_time: '', end_time: '' });
+  // Full audit-log timeline (created/edited/reassigned/status/deleted) —
+  // Super Admin / Admin only, same endpoint and gate as My Tasks.
+  const [timelineTask, setTimelineTask] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const openTimelineModal = async (task) => {
+    setTimelineTask(task);
+    setTimelineEvents([]);
+    setTimelineLoading(true);
+    try {
+      const res = await axios.get(`${API}/api/our-tasks/tasks/${task.task_id}/timeline`, { headers });
+      setTimelineEvents(res.data?.events || []);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load timeline');
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
   const [deptFilter, setDeptFilter] = useState('all');
   // Technology / Marketing grouping — a top-level scope above the department
   // pills, sourced from each department's `group` field (set in Operations >
@@ -3590,12 +3608,91 @@ export default function ProjectsPanel({
                   );
                 })()}
                 <div className="flex justify-end gap-2 pt-2">
+                  {['super_admin', 'admin'].includes((currentUser?.role || '').toLowerCase()) && (
+                    <Button variant="outline" className="text-amber-500" onClick={() => openTimelineModal(viewOnlyTask)} data-testid={`project-task-view-timeline-${viewOnlyTask.task_id}`}>
+                      <History className="h-3.5 w-3.5 mr-1" /> View Timeline
+                    </Button>
+                  )}
                   {canManageProjects && canEditProjectTask(viewOnlyTask) && (
                     <Button variant="outline" onClick={() => { const t = viewOnlyTask; setViewOnlyTask(null); handleEditTask(t); }}>
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
                     </Button>
                   )}
                   <Button variant="ghost" onClick={() => setViewOnlyTask(null)}>Close</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Full audit-log timeline — every create / edit / reassign / status
+            change / delete logged for this task, Date + Day + Time + User
+            each. Super Admin / Admin only (same gate as My Tasks). Nested on
+            top of the view popup — closing it returns there, not to the list. */}
+        {timelineTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[80] p-4" onClick={() => setTimelineTask(null)}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-5 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                      <History className="h-5 w-5 text-amber-500" /> Task Timeline
+                    </h3>
+                    <p className={`text-xs ${textSecondary} mt-0.5 line-clamp-1`}>{timelineTask.task_name}</p>
+                  </div>
+                  <button onClick={() => setTimelineTask(null)} className={textSecondary} data-testid="project-timeline-close">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 -mx-1 px-1">
+                  {timelineLoading ? (
+                    <p className={`text-xs italic ${textSecondary} text-center py-10`}>Loading timeline…</p>
+                  ) : timelineEvents.length === 0 ? (
+                    <p className={`text-xs italic ${textSecondary} text-center py-10`}>No events recorded yet.</p>
+                  ) : (
+                    <ol className="relative border-l-2 border-amber-500/30 ml-3 space-y-3 py-1">
+                      {timelineEvents.map((ev, idx) => {
+                        const at = ev.at ? new Date(ev.at) : null;
+                        const dateStr = at && !isNaN(at.getTime()) ? at.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (ev.at || '—');
+                        const dayStr = at && !isNaN(at.getTime()) ? at.toLocaleDateString('en-IN', { weekday: 'long' }) : '';
+                        const timeStr = at && !isNaN(at.getTime()) ? at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+                        const kindColor =
+                          ev.kind === 'created' ? 'bg-emerald-500'
+                          : ev.kind === 'edited' ? 'bg-blue-500'
+                          : ev.kind === 'reassigned' ? 'bg-indigo-500'
+                          : ev.kind === 'status_changed' ? 'bg-cyan-500'
+                          : ev.kind === 'approval_requested' ? 'bg-amber-500'
+                          : ev.kind === 'approval_decided' ? 'bg-purple-500'
+                          : ev.kind === 'deleted' ? 'bg-red-500'
+                          : 'bg-gray-400';
+                        return (
+                          <li key={idx} className="ml-4 relative" data-testid={`project-timeline-event-${idx}`}>
+                            <span className={`absolute -left-[22px] top-1 w-3 h-3 rounded-full ${kindColor} ring-2 ring-amber-500/30`} />
+                            <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                              <div className="flex items-center justify-between flex-wrap gap-1">
+                                <p className={`text-xs font-semibold ${textPrimary}`}>{ev.summary || ev.kind}</p>
+                                <p className={`text-[10px] ${textSecondary} text-right`}>{dateStr}{dayStr && ` · ${dayStr}`}{timeStr && ` · ${timeStr}`}</p>
+                              </div>
+                              <p className={`text-[11px] ${textSecondary} mt-0.5`}>
+                                <span className="font-medium">{ev.by_name || ev.by || '—'}</span>
+                                {ev.kind && <span className="ml-2 opacity-60">· {ev.kind.replace(/_/g, ' ')}</span>}
+                              </p>
+                              {ev.details && Object.keys(ev.details).length > 0 && (
+                                <div className={`mt-1.5 text-[10px] ${textSecondary} space-y-0.5`}>
+                                  {Object.entries(ev.details).filter(([, v]) => v !== null && v !== '' && v !== undefined).map(([k, v]) => (
+                                    <p key={k}><span className="opacity-70">{k.replace(/_/g, ' ')}:</span> <span className={textPrimary}>{String(v)}</span></p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t flex justify-end" style={{ borderColor: 'rgba(120,120,120,0.2)' }}>
+                  <Button variant="outline" onClick={() => setTimelineTask(null)}>Close</Button>
                 </div>
               </CardContent>
             </Card>
