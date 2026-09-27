@@ -276,6 +276,7 @@ class DebtUpdate(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     due_day: Optional[int] = None
+    tenure_months: Optional[int] = None
     principal_paid_date: Optional[str] = None
     notes: Optional[str] = None
     status: Optional[str] = None  # active | closed
@@ -293,6 +294,12 @@ class DebtPaymentUpdate(BaseModel):
     amount: Optional[float] = None
     date: Optional[str] = None
     note: Optional[str] = None
+
+
+class ChitAuctionCreate(BaseModel):
+    period: str  # YYYY-MM — the month this auction result is for
+    discount_amount: float  # what the winning bidder gave up that month
+    note: Optional[str] = ""
 
 
 def _validate_debt_fields(debt_type, principal, disbursed, monthly, due_day, frequency=None):
@@ -322,13 +329,43 @@ def _rates(debt_type: str, principal: float, disbursed: float, monthly_amount: f
     }
 
 
+def _chit_members(debt: dict) -> int:
+    """Number of subscribing members — one draws the pot each month, so this
+    is the chit's duration in months. Derived from start/end date rather than
+    trusting a possibly-stale stored tenure_months, so editing the dates keeps
+    every existing auction's math correct."""
+    if debt.get("tenure_months"):
+        return max(int(debt["tenure_months"]), 1)
+    start = _parse_date(debt["start_date"], "start_date")
+    if not debt.get("end_date"):
+        return 1
+    end = _parse_date(debt["end_date"], "end_date")
+    return max((end.year - start.year) * 12 + (end.month - start.month) + 1, 1)
+
+
+def _chit_payable(debt: dict, discount_amount: float) -> float:
+    """A chit month's payable once that month's auction discount is known:
+    (Chit Value − Discount) / Members — no foreman commission. Falls back to
+    the debt's own base monthly_amount if the chit has no principal_amount
+    recorded (shouldn't happen — create_debt always sets one for chit)."""
+    chit_value = debt.get("principal_amount") or debt.get("monthly_amount") or 0
+    members = _chit_members(debt)
+    return round(max(chit_value - discount_amount, 0) / members, 2)
+
+
 def _schedule(debt: dict, today: date) -> dict:
     """The full due schedule from start_date through end_date (or through
     today, if open-ended), stepped by the debt's frequency — monthly (the
     default), weekly, or yearly, all anchored to start_date the same way the
     existing monthly due_day already was. A "normal" (one-off) debt has
     end_date forced equal to start_date at creation, so this naturally
-    produces exactly one row for it with no special-casing needed here."""
+    produces exactly one row for it with no special-casing needed here.
+
+    A "chit" period is flat (monthly_amount, the base subscription) unless
+    that period has a recorded auction — see record_chit_auction — in which
+    case its payable is (Chit Value − that month's discount) / Members instead."""
+    is_chit = debt.get("debt_type") == "chit"
+    auctions_by_period = {a["period"]: a for a in (debt.get("auctions") or [])} if is_chit else {}
     start = _parse_date(debt["start_date"], "start_date")
     end = _parse_date(debt["end_date"], "end_date") if debt.get("end_date") else None
     frequency = debt.get("frequency") or "monthly"
@@ -364,7 +401,8 @@ def _schedule(debt: dict, today: date) -> dict:
         due_date = due_for(cursor)
         pays = by_period.get(period, [])
         paid = round(sum(p["amount"] for p in pays), 2)
-        due = debt["monthly_amount"]
+        auction = auctions_by_period.get(period)
+        due = _chit_payable(debt, auction["discount_amount"]) if auction else debt["monthly_amount"]
         if paid <= 0:
             status = "overdue" if due_date < today else "pending"
         elif paid + 0.01 < due:
@@ -385,6 +423,7 @@ def _schedule(debt: dict, today: date) -> dict:
             "period": period, "due_date": due_date.isoformat(), "amount_due": due,
             "amount_paid": paid, "balance": round(due - paid, 2), "status": status, "payments": pays,
             "last_payment_date": last_payment_date, "on_time": on_time, "days_late": days_late,
+            "auction": auction,
         })
         n += 1
         cursor = step(n)
@@ -408,6 +447,8 @@ def _schedule(debt: dict, today: date) -> dict:
 def _serialize_debt(debt: dict, today: date) -> dict:
     debt = {**debt, **_rates(debt.get("debt_type", "loan"), debt.get("principal_amount", 0),
                               debt.get("disbursed_amount") or debt.get("principal_amount", 0), debt.get("monthly_amount", 0))}
+    if debt.get("debt_type") == "chit":
+        debt["chit_members"] = _chit_members(debt)
     debt.update(_schedule(debt, today))
     return debt
 
@@ -506,6 +547,7 @@ async def create_debt(payload: DebtCreate, request: Request):
         "status": "active",
         "log_payments_as_expense": payload.log_payments_as_expense,
         "payments": [],
+        "auctions": [],
         "created_by": user.user_id, "created_at": now, "updated_at": now,
     }
     await db.my_finance_debts.insert_one(doc)
@@ -671,6 +713,65 @@ async def delete_debt_payment(debt_id: str, payment_id: str, request: Request):
     if payment and payment.get("expense_id"):
         await db.my_finance_expenses.delete_one({"expense_id": payment["expense_id"], "user_id": user.user_id})
     updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
+    return _serialize_debt(updated, date.today())
+
+
+# --------------------------------------------------------- Chit auctions
+# A chit has no fixed interest — each month's payable instead depends on that
+# month's auction: whatever the winning bidder gives up (the "discount") is
+# shared out over every member, so the payable shrinks from the base
+# subscription (Chit Value / Members) once a discount is recorded. A period
+# with no recorded auction simply falls back to the base subscription — see
+# _schedule(). One record per period; recording again for the same period
+# replaces it (a correction, not a second entry).
+
+@my_finance_router.post("/debts/{debt_id}/auction")
+async def record_chit_auction(debt_id: str, payload: ChitAuctionCreate, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    debt = await db.my_finance_debts.find_one({"debt_id": debt_id, "user_id": user.user_id}, {"_id": 0})
+    if not debt:
+        raise HTTPException(status_code=404, detail="Debt not found")
+    if debt.get("debt_type") != "chit":
+        raise HTTPException(status_code=400, detail="Auction results only apply to a chit")
+    try:
+        datetime.strptime(payload.period, "%Y-%m")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="period must be YYYY-MM")
+    chit_value = debt.get("principal_amount") or 0
+    if payload.discount_amount < 0 or payload.discount_amount > chit_value:
+        raise HTTPException(status_code=400, detail=f"Discount must be between 0 and the chit value (₹{chit_value:,.0f})")
+
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "period": payload.period, "discount_amount": round(payload.discount_amount, 2),
+        "note": (payload.note or "").strip(), "recorded_by": user.user_id, "recorded_at": now,
+    }
+    await db.my_finance_debts.update_one(
+        {"debt_id": debt_id, "user_id": user.user_id},
+        {"$pull": {"auctions": {"period": payload.period}}},
+    )
+    await db.my_finance_debts.update_one(
+        {"debt_id": debt_id, "user_id": user.user_id},
+        {"$push": {"auctions": record}, "$set": {"updated_at": now}},
+    )
+    updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
+    return _serialize_debt(updated, date.today())
+
+
+@my_finance_router.delete("/debts/{debt_id}/auction/{period}")
+async def delete_chit_auction(debt_id: str, period: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    result = await db.my_finance_debts.update_one(
+        {"debt_id": debt_id, "user_id": user.user_id},
+        {"$pull": {"auctions": {"period": period}}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Debt not found")
+    updated = await db.my_finance_debts.find_one({"debt_id": debt_id, "user_id": user.user_id}, {"_id": 0})
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Debt not found")
     return _serialize_debt(updated, date.today())
 
 

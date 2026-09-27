@@ -184,6 +184,7 @@ export default function MyFinancePage() {
   const [debtWizardStep, setDebtWizardStep] = useState('choose'); // 'choose' | 'form'
   const [debtForm, setDebtForm] = useState(emptyDebtForm());
   const [debtSaving, setDebtSaving] = useState(false);
+  const [editingDebtId, setEditingDebtId] = useState(null);
   const [openDebtId, setOpenDebtId] = useState(null); // expanded schedule
   const [debtDetail, setDebtDetail] = useState(null); // debt currently in the payment popup
 
@@ -225,13 +226,55 @@ export default function MyFinancePage() {
     return { totals, totalOutstanding, totalPaid };
   }, [debts]);
 
-  const openAddDebt = () => { setDebtForm(emptyDebtForm()); setDebtWizardStep('choose'); setShowDebtModal(true); };
+  const openAddDebt = () => { setEditingDebtId(null); setDebtForm(emptyDebtForm()); setDebtWizardStep('choose'); setShowDebtModal(true); };
   const chooseDebtType = (type) => { setDebtForm(emptyDebtForm(type)); setDebtWizardStep('form'); };
+  const closeDebtModal = () => { setShowDebtModal(false); setEditingDebtId(null); };
+  // Editing keeps the debt's existing type (the schedule model — EMI vs.
+  // loan vs. chit vs. normal — isn't switchable after creation) and skips
+  // straight to the form step.
+  const openEditDebt = (debt) => {
+    setEditingDebtId(debt.debt_id);
+    setDebtForm({
+      name: debt.name || '', debt_type: debt.debt_type, lender_name: debt.lender_name || '',
+      principal_amount: debt.principal_amount != null ? String(debt.principal_amount) : '',
+      disbursed_amount: debt.disbursed_amount != null ? String(debt.disbursed_amount) : '',
+      monthly_amount: debt.monthly_amount != null ? String(debt.monthly_amount) : '',
+      frequency: debt.frequency || 'monthly', start_date: debt.start_date || todayISO(),
+      end_date: debt.end_date || '', due_day: debt.due_day != null ? String(debt.due_day) : '',
+      tenure_months: debt.tenure_months != null ? String(debt.tenure_months) : '',
+      annual_interest_rate: debt.annual_interest_rate != null ? String(debt.annual_interest_rate) : '',
+      principal_paid_date: debt.principal_paid_date || '', notes: debt.notes || '',
+      log_as_income: false, log_payments_as_expense: debt.log_payments_as_expense !== false,
+    });
+    setDebtWizardStep('form');
+    setShowDebtModal(true);
+  };
   const saveDebt = async () => {
     if (!debtForm.name.trim()) { toast.error('Name is required'); return; }
     if (!debtForm.start_date) { toast.error(debtForm.debt_type === 'normal' ? 'Pick a due date' : 'Pick a start date'); return; }
     setDebtSaving(true);
     try {
+      if (editingDebtId) {
+        await api.put(`/my-finance/debts/${editingDebtId}`, {
+          name: debtForm.name.trim(),
+          lender_name: debtForm.lender_name,
+          principal_amount: debtForm.principal_amount ? Number(debtForm.principal_amount) : null,
+          disbursed_amount: debtForm.disbursed_amount ? Number(debtForm.disbursed_amount) : null,
+          monthly_amount: debtForm.monthly_amount ? Number(debtForm.monthly_amount) : null,
+          frequency: debtForm.frequency,
+          start_date: debtForm.start_date,
+          end_date: debtForm.end_date || null,
+          due_day: debtForm.due_day ? Number(debtForm.due_day) : null,
+          tenure_months: debtForm.tenure_months ? Number(debtForm.tenure_months) : null,
+          principal_paid_date: debtForm.principal_paid_date || null,
+          notes: debtForm.notes,
+          log_payments_as_expense: debtForm.log_payments_as_expense,
+        });
+        toast.success('Debt updated');
+        closeDebtModal();
+        load();
+        return;
+      }
       const res = await api.post('/my-finance/debts', {
         name: debtForm.name.trim(),
         debt_type: debtForm.debt_type,
@@ -257,7 +300,7 @@ export default function MyFinancePage() {
       setOpenDebtId(res.data.debt_id);
       load();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to add debt');
+      toast.error(error.response?.data?.detail || (editingDebtId ? 'Failed to update debt' : 'Failed to add debt'));
     } finally {
       setDebtSaving(false);
     }
@@ -340,6 +383,60 @@ export default function MyFinancePage() {
       refreshLedger();
     } catch (error) {
       toast.error('Failed to remove payment');
+    }
+  };
+
+  // ---- Chit auctions ----
+  // Every chit period defaults to the flat base subscription (Chit Value /
+  // Members). Recording that period's auction result — the discount the
+  // winning bidder gave up — recalculates just that month's payable; the
+  // Pay/Full buttons already above then act on the recalculated amount.
+  const [auctionPopup, setAuctionPopup] = useState(null); // { debtId, debtName, period, dueDate, discountAmount, note, chitValue, members }
+  const [auctionPopupSaving, setAuctionPopupSaving] = useState(false);
+  const openAuctionPopup = (debt, row) => {
+    setAuctionPopup({
+      debtId: debt.debt_id, debtName: debt.name, period: row.period, dueDate: row.due_date,
+      discountAmount: row.auction ? String(row.auction.discount_amount) : '',
+      note: row.auction?.note || '',
+      chitValue: debt.principal_amount || 0, members: debt.chit_members || 1,
+    });
+  };
+  const auctionPreviewPayable = useMemo(() => {
+    if (!auctionPopup) return null;
+    const discount = Number(auctionPopup.discountAmount);
+    if (!(discount >= 0)) return null;
+    return Math.round((Math.max(auctionPopup.chitValue - discount, 0) / auctionPopup.members) * 100) / 100;
+  }, [auctionPopup]);
+  const submitAuctionPopup = async () => {
+    if (!auctionPopup) return;
+    const discount = Number(auctionPopup.discountAmount);
+    if (!(discount >= 0)) { toast.error('Enter the auction discount amount'); return; }
+    setAuctionPopupSaving(true);
+    try {
+      const res = await api.post(`/my-finance/debts/${auctionPopup.debtId}/auction`, {
+        period: auctionPopup.period, discount_amount: discount, note: auctionPopup.note,
+      });
+      setDebts((prev) => prev.map((d) => (d.debt_id === auctionPopup.debtId ? res.data : d)));
+      setDebtDetail((prev) => (prev && prev.debt_id === auctionPopup.debtId ? res.data : prev));
+      toast.success('Auction recorded');
+      setAuctionPopup(null);
+      refreshLedger();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to record auction');
+    } finally {
+      setAuctionPopupSaving(false);
+    }
+  };
+  const deleteAuction = async (debtId, period) => {
+    if (!window.confirm("Remove this month's auction result? It reverts to the flat base subscription.")) return;
+    try {
+      const res = await api.delete(`/my-finance/debts/${debtId}/auction/${period}`);
+      setDebts((prev) => prev.map((d) => (d.debt_id === debtId ? res.data : d)));
+      setDebtDetail((prev) => (prev && prev.debt_id === debtId ? res.data : prev));
+      toast.success('Auction removed');
+      refreshLedger();
+    } catch (error) {
+      toast.error('Failed to remove auction');
     }
   };
 
@@ -612,6 +709,9 @@ export default function MyFinancePage() {
                                 <div><p className={textSecondary}>Disbursed</p><p className={`font-medium ${textPrimary}`}>{money(d.disbursed_amount)}</p></div>
                                 <div><p className={textSecondary}>Start → End</p><p className={`font-medium ${textPrimary}`}>{fmtDate(d.start_date)} → {d.end_date ? fmtDate(d.end_date) : 'Ongoing'}</p></div>
                                 <div><p className={textSecondary}>Total paid</p><p className="font-medium text-[#10b981]">{money(d.summary.total_paid)}</p></div>
+                                {d.debt_type === 'chit' && (
+                                  <div><p className={textSecondary}>Members</p><p className={`font-medium ${textPrimary}`}>{d.chit_members}</p></div>
+                                )}
                               </div>
                               {d.notes && <p className={`text-xs ${textSecondary} italic`}>{d.notes}</p>}
                               <div className="overflow-x-auto">
@@ -620,6 +720,7 @@ export default function MyFinancePage() {
                                     <tr>
                                       <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Month</th>
                                       <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Due Date</th>
+                                      {d.debt_type === 'chit' && <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Auction</th>}
                                       <th className={`px-3 py-2 text-right font-medium ${textSecondary}`}>Due</th>
                                       <th className={`px-3 py-2 text-right font-medium ${textSecondary}`}>Paid</th>
                                       <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Status</th>
@@ -635,6 +736,29 @@ export default function MyFinancePage() {
                                         <tr key={row.period}>
                                           <td className={`px-3 py-2 ${textPrimary}`}>{monthLabel(row.period)}</td>
                                           <td className={`px-3 py-2 ${textSecondary}`}>{fmtDate(row.due_date)}</td>
+                                          {d.debt_type === 'chit' && (
+                                            <td className="px-3 py-2">
+                                              {row.auction ? (
+                                                <div className="flex items-center gap-1">
+                                                  <span className={textPrimary}>{money(row.auction.discount_amount)} off</span>
+                                                  {!closed && (
+                                                    <>
+                                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => openAuctionPopup(d, row)} title="Edit auction result" data-testid={`my-finance-auction-edit-${d.debt_id}-${row.period}`}>
+                                                        <Pencil className="h-3 w-3" />
+                                                      </Button>
+                                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteAuction(d.debt_id, row.period)} title="Remove — revert to base subscription" data-testid={`my-finance-auction-delete-${d.debt_id}-${row.period}`}>
+                                                        <X className="h-3 w-3" />
+                                                      </Button>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              ) : !closed ? (
+                                                <Button variant="outline" size="sm" className="h-7" onClick={() => openAuctionPopup(d, row)} data-testid={`my-finance-auction-enter-${d.debt_id}-${row.period}`}>
+                                                  Enter Auction
+                                                </Button>
+                                              ) : <span className={textSecondary}>—</span>}
+                                            </td>
+                                          )}
                                           <td className={`px-3 py-2 text-right ${textPrimary}`}>{money(row.amount_due)}</td>
                                           <td className={`px-3 py-2 text-right ${textPrimary}`}>{money(row.amount_paid)}</td>
                                           <td className="px-3 py-2"><Badge className={`border ${meta.cls}`}>{meta.label}</Badge></td>
@@ -698,6 +822,9 @@ export default function MyFinancePage() {
                                 </table>
                               </div>
                               <div className="flex justify-end gap-2 pt-1">
+                                <Button variant="outline" size="sm" onClick={() => openEditDebt(d)} data-testid={`my-finance-debt-edit-${d.debt_id}`}>
+                                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                                </Button>
                                 {closed ? (
                                   <Button variant="outline" size="sm" onClick={() => reopenDebt(d.debt_id)}>Reopen</Button>
                                 ) : (
@@ -786,8 +913,8 @@ export default function MyFinancePage() {
           </DialogContent>
         </Dialog>
 
-        {/* Add Debt */}
-        <Dialog open={showDebtModal} onOpenChange={setShowDebtModal}>
+        {/* Add / Edit Debt */}
+        <Dialog open={showDebtModal} onOpenChange={(o) => { if (!o) closeDebtModal(); }}>
           <DialogContent className={`${bgCard} max-w-lg max-h-[85vh] overflow-y-auto`}>
             {debtWizardStep === 'choose' ? (
               <>
@@ -810,16 +937,18 @@ export default function MyFinancePage() {
                     );
                   })}
                 </div>
-                <DialogFooter><Button variant="ghost" onClick={() => setShowDebtModal(false)}>Cancel</Button></DialogFooter>
+                <DialogFooter><Button variant="ghost" onClick={closeDebtModal}>Cancel</Button></DialogFooter>
               </>
             ) : (
               <>
                 <DialogHeader>
                   <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
-                    <button type="button" onClick={() => setDebtWizardStep('choose')} className={textSecondary} title="Change type" data-testid="my-finance-debt-wizard-back">
-                      <ArrowLeft className="h-4 w-4" />
-                    </button>
-                    Add {DEBT_WIZARD_OPTIONS.find((o) => o.type === debtForm.debt_type)?.title}
+                    {!editingDebtId && (
+                      <button type="button" onClick={() => setDebtWizardStep('choose')} className={textSecondary} title="Change type" data-testid="my-finance-debt-wizard-back">
+                        <ArrowLeft className="h-4 w-4" />
+                      </button>
+                    )}
+                    {editingDebtId ? 'Edit' : 'Add'} {DEBT_WIZARD_OPTIONS.find((o) => o.type === debtForm.debt_type)?.title}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-3">
@@ -968,10 +1097,12 @@ export default function MyFinancePage() {
                     <Label className={textPrimary}>Notes</Label>
                     <Textarea value={debtForm.notes} onChange={(e) => setDebtForm({ ...debtForm, notes: e.target.value })} rows={2} className={inputCls} />
                   </div>
-                  <label className="col-span-2 flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={debtForm.log_as_income} onChange={(e) => setDebtForm({ ...debtForm, log_as_income: e.target.checked })} />
-                    <span className={textSecondary}>Also record the received amount as an Income entry</span>
-                  </label>
+                  {!editingDebtId && (
+                    <label className="col-span-2 flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={debtForm.log_as_income} onChange={(e) => setDebtForm({ ...debtForm, log_as_income: e.target.checked })} />
+                      <span className={textSecondary}>Also record the received amount as an Income entry</span>
+                    </label>
+                  )}
                   {debtForm.debt_type !== 'normal' && (
                     <label className="col-span-2 flex items-center gap-2 text-sm">
                       <input type="checkbox" checked={debtForm.log_payments_as_expense} onChange={(e) => setDebtForm({ ...debtForm, log_payments_as_expense: e.target.checked })} />
@@ -980,9 +1111,9 @@ export default function MyFinancePage() {
                   )}
                 </div>
                 <DialogFooter>
-                  <Button variant="ghost" onClick={() => setShowDebtModal(false)}>Cancel</Button>
+                  <Button variant="ghost" onClick={closeDebtModal}>Cancel</Button>
                   <Button onClick={saveDebt} disabled={debtSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-debt-save-btn">
-                    {debtSaving ? 'Saving…' : 'Add Debt'}
+                    {debtSaving ? 'Saving…' : editingDebtId ? 'Save Changes' : 'Add Debt'}
                   </Button>
                 </DialogFooter>
               </>
@@ -1061,6 +1192,46 @@ export default function MyFinancePage() {
               <Button variant="ghost" onClick={() => setPayPopup(null)}>Cancel</Button>
               <Button onClick={submitPayPopup} disabled={payPopupSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-pay-popup-save">
                 {payPopupSaving ? 'Saving…' : payPopup?.mode === 'edit' ? 'Save Changes' : 'Record Payment'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Chit auction result — the discount that month's winning bidder gave up */}
+        <Dialog open={!!auctionPopup} onOpenChange={(o) => { if (!o) setAuctionPopup(null); }}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader><DialogTitle className={textPrimary}>Auction Result</DialogTitle></DialogHeader>
+            {auctionPopup && (
+              <div className="space-y-3">
+                <p className={`text-xs ${textSecondary}`}>{auctionPopup.debtName} · {monthLabel(auctionPopup.period)} · Due {fmtDate(auctionPopup.dueDate)}</p>
+                <div>
+                  <Label className={textPrimary}>Discount Amount (₹) *</Label>
+                  <Input
+                    type="number" min="0" step="any" autoFocus
+                    value={auctionPopup.discountAmount}
+                    onChange={(e) => setAuctionPopup((prev) => ({ ...prev, discountAmount: e.target.value }))}
+                    className={inputCls} placeholder="What the winning bidder gave up this month" data-testid="my-finance-auction-popup-discount"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Note</Label>
+                  <Input value={auctionPopup.note} onChange={(e) => setAuctionPopup((prev) => ({ ...prev, note: e.target.value }))} className={inputCls} placeholder="Optional" />
+                </div>
+                {auctionPreviewPayable !== null && (
+                  <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3 text-sm`}>
+                    <span className={textSecondary}>Payable this month: </span>
+                    <span className={`font-semibold ${textPrimary}`}>{money(auctionPreviewPayable)}</span>
+                    <p className={`text-[11px] mt-1 ${textSecondary}`}>
+                      (Chit Value {money(auctionPopup.chitValue)} − Discount {money(Number(auctionPopup.discountAmount) || 0)}) ÷ {auctionPopup.members} members
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setAuctionPopup(null)}>Cancel</Button>
+              <Button onClick={submitAuctionPopup} disabled={auctionPopupSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-auction-popup-save">
+                {auctionPopupSaving ? 'Saving…' : 'Record Auction'}
               </Button>
             </DialogFooter>
           </DialogContent>
