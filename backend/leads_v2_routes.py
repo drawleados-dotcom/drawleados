@@ -1215,9 +1215,22 @@ async def get_overview(request: Request, date_from: Optional[str] = None, date_t
     )
     invoice_stage_id = invoice_stage["stage_id"] if invoice_stage else None
 
+    # "Proposal Sent" is its own stage, one step before "Quotation" — a lead
+    # sitting there hasn't triggered the quotation_id auto-set (that only
+    # fires on the "Quotation" stage's /quot/i name match), so it was being
+    # missed entirely. A proposal is "shared" the moment either signal fires.
+    proposal_sent_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "proposal.?sent", "$options": "i"}},
+        {"_id": 0},
+    )
+    proposal_sent_stage_id = proposal_sent_stage["stage_id"] if proposal_sent_stage else None
+
     total = len(leads)
     appointment_leads = [l for l in leads if l.get("appointment_at")]
-    proposal_leads = [l for l in leads if l.get("quotation_id")]
+    proposal_leads = [
+        l for l in leads
+        if l.get("quotation_id") or (proposal_sent_stage_id and l.get("stage_id") == proposal_sent_stage_id)
+    ]
     sales_leads = [l for l in leads if invoice_stage_id and l.get("stage_id") == invoice_stage_id]
 
     def pct(part: int, whole: int) -> float:

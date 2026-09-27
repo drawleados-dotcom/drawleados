@@ -3493,6 +3493,10 @@ const OverviewPanel = ({
   const [filterService, setFilterService] = useState(null);
 
   const invoiceRaiseStage = stages.find(s => /invoice.?rais/i.test(s.name || ''));
+  // Mirrors the /overview endpoint's own proposal_shared signal — quotation_id
+  // OR sitting at the "Proposal Sent" stage, since that stage sits one step
+  // before "Quotation" and never gets a quotation_id of its own.
+  const proposalSentStage = stages.find(s => /proposal.?sent/i.test(s.name || ''));
 
   const cards = [
     { key: 'leads', label: 'Leads', sub: 'in this period', count: data?.leads ?? 0, icon: Users, ring: 'from-blue-500/30 to-blue-500/0', text: 'text-blue-500' },
@@ -3506,7 +3510,7 @@ const OverviewPanel = ({
   // both mean the whole cohort.
   let stepLeads = leads;
   if (selectedStep === 'appointment') stepLeads = leads.filter(l => l.appointment_at);
-  else if (selectedStep === 'proposal_shared') stepLeads = leads.filter(l => l.quotation_id);
+  else if (selectedStep === 'proposal_shared') stepLeads = leads.filter(l => l.quotation_id || (proposalSentStage && l.stage_id === proposalSentStage.stage_id));
   else if (selectedStep === 'sales') stepLeads = invoiceRaiseStage ? leads.filter(l => l.stage_id === invoiceRaiseStage.stage_id) : [];
 
   // Stage breakdown of stepLeads — only the stages actually present, and
