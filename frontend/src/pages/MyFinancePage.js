@@ -11,16 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import {
   Wallet, Plus, Pencil, Trash2, TrendingUp, TrendingDown, AlertTriangle,
-  Landmark, ChevronDown, ChevronRight, CheckCircle2, X,
+  Landmark, ChevronDown, ChevronRight, CheckCircle2, X, List,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: Wallet },
+  { key: 'transactions', label: 'Transactions', icon: List },
   { key: 'income', label: 'Income', icon: TrendingUp },
   { key: 'expense', label: 'Expense', icon: TrendingDown },
   { key: 'debts', label: 'Debt Management', icon: Landmark },
 ];
+
+const DEBT_TYPE_META = {
+  loan: { label: 'Loan', cls: 'bg-[#3b82f6]/15 text-[#3b82f6] border-[#3b82f6]/30' },
+  emi: { label: 'EMI', cls: 'bg-[#f97316]/15 text-[#f97316] border-[#f97316]/30' },
+  chit: { label: 'Chit', cls: 'bg-[#8b5cf6]/15 text-[#8b5cf6] border-[#8b5cf6]/30' },
+};
 
 const INCOME_SOURCES = [
   { value: 'salary', label: 'Salary' },
@@ -48,7 +55,8 @@ const emptyIncomeForm = () => ({ source_type: 'salary', amount: '', date: todayI
 const emptyExpenseForm = () => ({ category: 'General', amount: '', date: todayISO(), notes: '' });
 const emptyDebtForm = () => ({
   name: '', debt_type: 'loan', lender_name: '', principal_amount: '', disbursed_amount: '',
-  monthly_amount: '', start_date: todayISO(), end_date: '', due_day: '', notes: '', log_as_income: true,
+  monthly_amount: '', start_date: todayISO(), end_date: '', due_day: '', notes: '',
+  log_as_income: true, log_payments_as_expense: true,
 });
 
 export default function MyFinancePage() {
@@ -66,20 +74,23 @@ export default function MyFinancePage() {
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [debts, setDebts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, i, e, d] = await Promise.all([
+      const [s, i, e, d, t] = await Promise.all([
         api.get('/my-finance/summary'),
         api.get('/my-finance/incomes'),
         api.get('/my-finance/expenses'),
         api.get('/my-finance/debts'),
+        api.get('/my-finance/transactions'),
       ]);
       setSummary(s.data);
       setIncomes(i.data || []);
       setExpenses(e.data || []);
       setDebts(d.data || []);
+      setTransactions(t.data || []);
     } catch (error) {
       toast.error('Failed to load My Finance');
     } finally {
@@ -180,9 +191,10 @@ export default function MyFinancePage() {
     if (!(principal > 0)) { toast.error('Enter the principal / total amount'); return; }
     if (!(monthly > 0)) { toast.error('Enter the monthly amount'); return; }
     if (!debtForm.start_date) { toast.error('Pick a start date'); return; }
+    if (debtForm.debt_type === 'emi' && !debtForm.end_date) { toast.error('An EMI needs an end date — it has a fixed tenure'); return; }
     setDebtSaving(true);
     try {
-      await api.post('/my-finance/debts', {
+      const res = await api.post('/my-finance/debts', {
         name: debtForm.name.trim(),
         debt_type: debtForm.debt_type,
         lender_name: debtForm.lender_name,
@@ -194,9 +206,13 @@ export default function MyFinancePage() {
         due_day: debtForm.due_day ? Number(debtForm.due_day) : null,
         notes: debtForm.notes,
         log_as_income: debtForm.log_as_income,
+        log_payments_as_expense: debtForm.log_payments_as_expense,
       });
       toast.success('Debt added');
       setShowDebtModal(false);
+      // Jump straight to its schedule, expanded — the start date is very
+      // likely in the past, so this is where past months get backfilled.
+      setOpenDebtId(res.data.debt_id);
       load();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to add debt');
@@ -220,16 +236,32 @@ export default function MyFinancePage() {
 
   const [payDraft, setPayDraft] = useState({}); // period -> amount string, for the detail popup
   const [paySaving, setPaySaving] = useState(null); // period being submitted
+  // A payment can auto-log a matching Expense (see the backend) — refresh
+  // just those totals/lists in the background rather than the whole page.
+  const refreshLedger = async () => {
+    try {
+      const [s, e, t] = await Promise.all([
+        api.get('/my-finance/summary'),
+        api.get('/my-finance/expenses'),
+        api.get('/my-finance/transactions'),
+      ]);
+      setSummary(s.data);
+      setExpenses(e.data || []);
+      setTransactions(t.data || []);
+    } catch (error) { /* background refresh — non-critical */ }
+  };
   const payPeriod = async (debtId, period, amount) => {
     const amt = Number(amount);
     if (!(amt > 0)) { toast.error('Enter an amount greater than 0'); return; }
     setPaySaving(period);
     try {
       const res = await api.post(`/my-finance/debts/${debtId}/payments`, { period, amount: amt });
-      setDebtDetail(res.data);
       setDebts((prev) => prev.map((d) => (d.debt_id === debtId ? res.data : d)));
-      setPayDraft((prev) => ({ ...prev, [period]: '' }));
+      // Only touch the Payment History popup if it's already open on this same debt.
+      setDebtDetail((prev) => (prev && prev.debt_id === debtId ? res.data : prev));
+      setPayDraft((prev) => ({ ...prev, [`${debtId}:${period}`]: '' }));
       toast.success('Payment recorded');
+      refreshLedger();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to record payment');
     } finally {
@@ -240,9 +272,10 @@ export default function MyFinancePage() {
     if (!window.confirm('Remove this payment?')) return;
     try {
       const res = await api.delete(`/my-finance/debts/${debtId}/payments/${paymentId}`);
-      setDebtDetail(res.data);
       setDebts((prev) => prev.map((d) => (d.debt_id === debtId ? res.data : d)));
+      setDebtDetail((prev) => (prev && prev.debt_id === debtId ? res.data : prev));
       toast.success('Payment removed');
+      refreshLedger();
     } catch (error) {
       toast.error('Failed to remove payment');
     }
@@ -324,6 +357,38 @@ export default function MyFinancePage() {
                       })}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'transactions' && (
+              <div className="space-y-3">
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <p className={`${bgSecondary} px-4 py-2 text-xs font-semibold uppercase ${textSecondary}`}>Every income, expense, and debt payment — one ledger, newest first</p>
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Notes</th>
+                        <th className={`px-4 py-3 text-right font-medium ${textSecondary}`}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {transactions.length === 0 ? (
+                        <tr><td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>Nothing recorded yet.</td></tr>
+                      ) : transactions.map((t) => (
+                        <tr key={`${t.type}-${t.ref_id}`} className={`${bgCard} hover:${bgSecondary} transition-colors`} data-testid={`my-finance-txn-${t.type}-${t.ref_id}`}>
+                          <td className={`px-4 py-3 ${textPrimary}`}>{fmtDate(t.date)}</td>
+                          <td className={`px-4 py-3 ${textPrimary}`}>{t.label}</td>
+                          <td className={`px-4 py-3 ${textSecondary}`}>{t.notes || '—'}</td>
+                          <td className={`px-4 py-3 text-right font-medium ${t.amount >= 0 ? 'text-[#10b981]' : 'text-red-500'}`}>
+                            {t.amount >= 0 ? '+' : '−'}{money(Math.abs(t.amount))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -436,8 +501,8 @@ export default function MyFinancePage() {
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <p className={`text-sm font-semibold ${textPrimary} truncate`}>{d.name}</p>
-                                  <Badge className={d.debt_type === 'chit' ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/30' : 'bg-[#3b82f6]/15 text-[#3b82f6] border border-[#3b82f6]/30'}>
-                                    {d.debt_type === 'chit' ? 'Chit' : 'Loan'}
+                                  <Badge className={`border ${(DEBT_TYPE_META[d.debt_type] || DEBT_TYPE_META.loan).cls}`}>
+                                    {(DEBT_TYPE_META[d.debt_type] || DEBT_TYPE_META.loan).label}
                                   </Badge>
                                   {closed && <Badge className="bg-slate-500/15 text-slate-400 border border-slate-500/30">Closed</Badge>}
                                   {!closed && d.summary.overdue_count > 0 && (
@@ -631,19 +696,23 @@ export default function MyFinancePage() {
               <div>
                 <Label className={textPrimary}>Type</Label>
                 <Select value={debtForm.debt_type} onValueChange={(v) => setDebtForm({ ...debtForm, debt_type: v })}>
-                  <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={inputCls} data-testid="my-finance-debt-type-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="loan">Loan (interest-based)</SelectItem>
+                    <SelectItem value="loan">Loan (interest-only)</SelectItem>
+                    <SelectItem value="emi">EMI (fixed installment)</SelectItem>
                     <SelectItem value="chit">Chit</SelectItem>
                   </SelectContent>
                 </Select>
+                {debtForm.debt_type === 'emi' && (
+                  <p className={`text-[11px] mt-1 ${textSecondary}`}>Each month's amount already covers principal + interest, same as a bank EMI — needs an End Date since the tenure is fixed.</p>
+                )}
               </div>
               <div>
                 <Label className={textPrimary}>Lender / Chit Name</Label>
                 <Input value={debtForm.lender_name} onChange={(e) => setDebtForm({ ...debtForm, lender_name: e.target.value })} className={inputCls} />
               </div>
               <div>
-                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Total Value *' : 'Principal Amount *'}</Label>
+                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Total Value *' : debtForm.debt_type === 'emi' ? 'Loan Amount *' : 'Principal Amount *'}</Label>
                 <Input type="number" min="0" step="any" value={debtForm.principal_amount} onChange={(e) => setDebtForm({ ...debtForm, principal_amount: e.target.value })} className={inputCls} placeholder="2,00,000" data-testid="my-finance-debt-principal-input" />
               </div>
               <div>
@@ -651,7 +720,7 @@ export default function MyFinancePage() {
                 <Input type="number" min="0" step="any" value={debtForm.disbursed_amount} onChange={(e) => setDebtForm({ ...debtForm, disbursed_amount: e.target.value })} className={inputCls} placeholder="Defaults to the amount above" data-testid="my-finance-debt-disbursed-input" />
               </div>
               <div>
-                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Monthly Contribution *' : 'Monthly Interest *'}</Label>
+                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Monthly Contribution *' : debtForm.debt_type === 'emi' ? 'Monthly EMI Amount *' : 'Monthly Interest *'}</Label>
                 <Input type="number" min="0" step="any" value={debtForm.monthly_amount} onChange={(e) => setDebtForm({ ...debtForm, monthly_amount: e.target.value })} className={inputCls} placeholder="6,000" data-testid="my-finance-debt-monthly-input" />
               </div>
               <div>
@@ -663,8 +732,8 @@ export default function MyFinancePage() {
                 <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} />
               </div>
               <div>
-                <Label className={textPrimary}>End Date</Label>
-                <Input type="date" value={debtForm.end_date} onChange={(e) => setDebtForm({ ...debtForm, end_date: e.target.value })} className={inputCls} placeholder="Leave blank if ongoing" />
+                <Label className={textPrimary}>End Date{debtForm.debt_type === 'emi' ? ' *' : ''}</Label>
+                <Input type="date" value={debtForm.end_date} onChange={(e) => setDebtForm({ ...debtForm, end_date: e.target.value })} className={inputCls} placeholder={debtForm.debt_type === 'emi' ? undefined : 'Leave blank if ongoing'} data-testid="my-finance-debt-end-date-input" />
               </div>
               <div className="col-span-2">
                 <Label className={textPrimary}>Notes</Label>
@@ -682,6 +751,10 @@ export default function MyFinancePage() {
               <label className="col-span-2 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={debtForm.log_as_income} onChange={(e) => setDebtForm({ ...debtForm, log_as_income: e.target.checked })} />
                 <span className={textSecondary}>Also record the received amount as an Income entry</span>
+              </label>
+              <label className="col-span-2 flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={debtForm.log_payments_as_expense} onChange={(e) => setDebtForm({ ...debtForm, log_payments_as_expense: e.target.checked })} />
+                <span className={textSecondary}>Also record each payment as an Expense entry</span>
               </label>
             </div>
             <DialogFooter>

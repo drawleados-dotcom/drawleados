@@ -24,7 +24,15 @@ from datetime import date, datetime, timezone
 
 my_finance_router = APIRouter(prefix="/my-finance", tags=["my-finance"])
 
-DEBT_TYPES = {"loan", "chit"}
+# "loan" — interest-only: the monthly amount is pure interest, the principal
+#   itself is settled separately (or never, if it's rolled over) — this is
+#   the ₹2L-at-₹6k/month kind of arrangement. Interest rate is computed.
+# "emi" — a fixed-tenure installment: the monthly amount already blends
+#   principal + interest and fully closes the debt by end_date (which is
+#   required for this type). No rate is computed — the amount itself is
+#   what's owed each month, same as a bank EMI statement already shows.
+# "chit" — a periodic contribution, no interest concept at all.
+DEBT_TYPES = {"loan", "emi", "chit"}
 INCOME_SOURCES = {"salary", "debt", "other"}
 
 
@@ -225,6 +233,7 @@ class DebtCreate(BaseModel):
     due_day: Optional[int] = None  # 1-31; defaults to start_date's day
     notes: Optional[str] = ""
     log_as_income: bool = True  # also record the disbursed amount as an Income entry
+    log_payments_as_expense: bool = True  # also record each future payment as an Expense entry
 
 
 class DebtUpdate(BaseModel):
@@ -238,6 +247,7 @@ class DebtUpdate(BaseModel):
     due_day: Optional[int] = None
     notes: Optional[str] = None
     status: Optional[str] = None  # active | closed
+    log_payments_as_expense: Optional[bool] = None
 
 
 class DebtPayment(BaseModel):
@@ -344,6 +354,8 @@ async def create_debt(payload: DebtCreate, request: Request):
         raise HTTPException(status_code=400, detail="Name is required")
     _validate_debt_fields(payload.debt_type, payload.principal_amount, payload.disbursed_amount, payload.monthly_amount, payload.due_day)
     start = _parse_date(payload.start_date, "start_date")
+    if payload.debt_type == "emi" and not payload.end_date:
+        raise HTTPException(status_code=400, detail="An EMI needs an end date — it's a fixed-tenure installment, not an open-ended one")
     if payload.end_date:
         end = _parse_date(payload.end_date, "end_date")
         if end < start:
@@ -365,6 +377,7 @@ async def create_debt(payload: DebtCreate, request: Request):
         "due_day": payload.due_day or start.day,
         "notes": (payload.notes or "").strip(),
         "status": "active",
+        "log_payments_as_expense": payload.log_payments_as_expense,
         "payments": [],
         "created_by": user.user_id, "created_at": now, "updated_at": now,
     }
@@ -437,14 +450,31 @@ async def add_debt_payment(debt_id: str, payload: DebtPayment, request: Request)
     except ValueError:
         raise HTTPException(status_code=400, detail="period must be YYYY-MM")
 
+    now = datetime.now(timezone.utc).isoformat()
     payment = {
         "payment_id": f"mypay_{uuid.uuid4().hex[:10]}",
         "period": period, "amount": round(payload.amount, 2), "date": pay_date,
-        "note": (payload.note or "").strip(), "created_at": datetime.now(timezone.utc).isoformat(),
+        "note": (payload.note or "").strip(), "created_at": now, "expense_id": None,
     }
+
+    # Mirrors log_as_income on creation: a payment going out is an Expense,
+    # unless this debt was set up to skip that. Linked by expense_id so
+    # undoing the payment below also removes the matching expense.
+    if debt.get("log_payments_as_expense", True):
+        expense_id = f"myexp_{uuid.uuid4().hex[:10]}"
+        await db.my_finance_expenses.insert_one({
+            "expense_id": expense_id, "user_id": user.user_id,
+            "category": debt.get("name") or "Debt Payment",
+            "amount": round(payload.amount, 2), "date": pay_date,
+            "notes": f'Payment for {period}' + (f' — {payload.note.strip()}' if payload.note else ''),
+            "debt_id": debt_id, "debt_payment_id": payment["payment_id"],
+            "created_at": now, "updated_at": now,
+        })
+        payment["expense_id"] = expense_id
+
     await db.my_finance_debts.update_one(
         {"debt_id": debt_id},
-        {"$push": {"payments": payment}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        {"$push": {"payments": payment}, "$set": {"updated_at": now}},
     )
     updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
     return _serialize_debt(updated, date.today())
@@ -454,14 +484,63 @@ async def add_debt_payment(debt_id: str, payload: DebtPayment, request: Request)
 async def delete_debt_payment(debt_id: str, payment_id: str, request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
+    debt = await db.my_finance_debts.find_one({"debt_id": debt_id, "user_id": user.user_id}, {"_id": 0})
+    if not debt:
+        raise HTTPException(status_code=404, detail="Debt not found")
+    payment = next((p for p in debt.get("payments") or [] if p.get("payment_id") == payment_id), None)
     result = await db.my_finance_debts.update_one(
         {"debt_id": debt_id, "user_id": user.user_id},
         {"$pull": {"payments": {"payment_id": payment_id}}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Debt not found")
+    # Undo the auto-logged Expense too, if this payment had one.
+    if payment and payment.get("expense_id"):
+        await db.my_finance_expenses.delete_one({"expense_id": payment["expense_id"], "user_id": user.user_id})
     updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
     return _serialize_debt(updated, date.today())
+
+
+# ------------------------------------------------------------ Transactions
+# One combined, chronological ledger: every Income entry, every Expense entry
+# (which already includes auto-logged debt payments — see add_debt_payment),
+# plus any debt payment that predates or opted out of that auto-logging, so
+# nothing paid or earned is ever missing from the one place that shows it all.
+
+@my_finance_router.get("/transactions")
+async def list_transactions(request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    incomes = await db.my_finance_incomes.find({"user_id": user.user_id}, {"_id": 0}).to_list(20000)
+    expenses = await db.my_finance_expenses.find({"user_id": user.user_id}, {"_id": 0}).to_list(20000)
+    debts = await db.my_finance_debts.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+
+    rows = []
+    for i in incomes:
+        rows.append({
+            "type": "income", "date": i["date"], "amount": i["amount"],
+            "label": f"Income — {i.get('source_type', 'salary').title()}", "notes": i.get("notes") or "",
+            "ref_id": i["income_id"],
+        })
+    for e in expenses:
+        rows.append({
+            "type": "expense", "date": e["date"], "amount": -e["amount"],
+            "label": f"Expense — {e.get('category', 'General')}", "notes": e.get("notes") or "",
+            "ref_id": e["expense_id"],
+        })
+    for d in debts:
+        for p in d.get("payments") or []:
+            if p.get("expense_id"):
+                continue  # already represented above as its linked Expense row
+            rows.append({
+                "type": "debt_payment", "date": p["date"], "amount": -p["amount"],
+                "label": f'Debt payment — "{d.get("name", "")}" ({p["period"]})', "notes": p.get("note") or "",
+                "ref_id": p["payment_id"],
+            })
+
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows
 
 
 # ----------------------------------------------------------------- Summary
