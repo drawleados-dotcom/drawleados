@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import {
   Wallet, Plus, Pencil, Trash2, TrendingUp, TrendingDown, AlertTriangle,
-  Landmark, ChevronDown, ChevronRight, CheckCircle2, X, List,
+  Landmark, ChevronDown, ChevronRight, CheckCircle2, X, List, Receipt, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,7 +27,17 @@ const DEBT_TYPE_META = {
   loan: { label: 'Loan', cls: 'bg-[#3b82f6]/15 text-[#3b82f6] border-[#3b82f6]/30' },
   emi: { label: 'EMI', cls: 'bg-[#f97316]/15 text-[#f97316] border-[#f97316]/30' },
   chit: { label: 'Chit', cls: 'bg-[#8b5cf6]/15 text-[#8b5cf6] border-[#8b5cf6]/30' },
+  normal: { label: 'Debt', cls: 'bg-[#ef4444]/15 text-[#ef4444] border-[#ef4444]/30' },
 };
+
+// Step 1 of "Add Debt" — pick which shape this debt takes before showing its
+// (quite different) form. Order matches how the person described them.
+const DEBT_WIZARD_OPTIONS = [
+  { type: 'emi', title: 'EMI', desc: 'Fixed installment every month over a set tenure — enter the amount directly, or an interest rate to work it out.', icon: Landmark },
+  { type: 'loan', title: 'Interest Based', desc: 'A principal you still owe, with interest paid on its own cycle — monthly, weekly, or yearly.', icon: TrendingDown },
+  { type: 'chit', title: 'Chit', desc: 'A recurring chit contribution for a fixed number of months.', icon: Wallet },
+  { type: 'normal', title: 'Normal Debt', desc: 'A one-off amount owed by a due date — pay it partly or fully, whenever.', icon: Receipt },
+];
 
 const INCOME_SOURCES = [
   { value: 'salary', label: 'Salary' },
@@ -53,11 +63,13 @@ const STATUS_META = {
 
 const emptyIncomeForm = () => ({ source_type: 'salary', amount: '', date: todayISO(), notes: '' });
 const emptyExpenseForm = () => ({ category: 'General', amount: '', date: todayISO(), notes: '' });
-const emptyDebtForm = () => ({
-  name: '', debt_type: 'loan', lender_name: '', principal_amount: '', disbursed_amount: '',
-  monthly_amount: '', start_date: todayISO(), end_date: '', due_day: '', notes: '',
+const emptyDebtForm = (debt_type = 'loan') => ({
+  name: '', debt_type, lender_name: '', principal_amount: '', disbursed_amount: '',
+  monthly_amount: '', frequency: 'monthly', start_date: todayISO(), end_date: '', due_day: '',
+  tenure_months: '', annual_interest_rate: '', principal_paid_date: '', notes: '',
   log_as_income: true, log_payments_as_expense: true,
 });
+
 
 export default function MyFinancePage() {
   const { isDark } = useTheme();
@@ -169,11 +181,13 @@ export default function MyFinancePage() {
 
   // ---- Debts ----
   const [showDebtModal, setShowDebtModal] = useState(false);
+  const [debtWizardStep, setDebtWizardStep] = useState('choose'); // 'choose' | 'form'
   const [debtForm, setDebtForm] = useState(emptyDebtForm());
   const [debtSaving, setDebtSaving] = useState(false);
   const [openDebtId, setOpenDebtId] = useState(null); // expanded schedule
   const [debtDetail, setDebtDetail] = useState(null); // debt currently in the payment popup
 
+  // Loan (interest-based): nominal/effective rate preview, same as before.
   const rates = useMemo(() => {
     const p = Number(debtForm.principal_amount), m = Number(debtForm.monthly_amount);
     if (debtForm.debt_type !== 'loan' || !(p > 0) || !(m > 0)) return null;
@@ -183,27 +197,39 @@ export default function MyFinancePage() {
     return { nominal, effective, differs: d !== p };
   }, [debtForm.debt_type, debtForm.principal_amount, debtForm.disbursed_amount, debtForm.monthly_amount]);
 
-  const openAddDebt = () => { setDebtForm(emptyDebtForm()); setShowDebtModal(true); };
+  // EMI: preview the computed installment when principal + rate + tenure are
+  // known but the amount itself hasn't been typed in — mirrors _emi_amount
+  // on the backend (standard reducing-balance formula), just for preview.
+  const emiPreview = useMemo(() => {
+    const p = Number(debtForm.principal_amount), rate = Number(debtForm.annual_interest_rate);
+    const tenure = Number(debtForm.tenure_months);
+    if (debtForm.debt_type !== 'emi' || debtForm.monthly_amount || !(p > 0) || !(rate > 0) || !(tenure > 0)) return null;
+    const r = rate / 12 / 100;
+    const factor = Math.pow(1 + r, tenure);
+    return Math.round((p * r * factor) / (factor - 1) * 100) / 100;
+  }, [debtForm.debt_type, debtForm.principal_amount, debtForm.annual_interest_rate, debtForm.tenure_months, debtForm.monthly_amount]);
+
+  const openAddDebt = () => { setDebtForm(emptyDebtForm()); setDebtWizardStep('choose'); setShowDebtModal(true); };
+  const chooseDebtType = (type) => { setDebtForm(emptyDebtForm(type)); setDebtWizardStep('form'); };
   const saveDebt = async () => {
     if (!debtForm.name.trim()) { toast.error('Name is required'); return; }
-    const principal = Number(debtForm.principal_amount);
-    const monthly = Number(debtForm.monthly_amount);
-    if (!(principal > 0)) { toast.error('Enter the principal / total amount'); return; }
-    if (!(monthly > 0)) { toast.error('Enter the monthly amount'); return; }
-    if (!debtForm.start_date) { toast.error('Pick a start date'); return; }
-    if (debtForm.debt_type === 'emi' && !debtForm.end_date) { toast.error('An EMI needs an end date — it has a fixed tenure'); return; }
+    if (!debtForm.start_date) { toast.error(debtForm.debt_type === 'normal' ? 'Pick a due date' : 'Pick a start date'); return; }
     setDebtSaving(true);
     try {
       const res = await api.post('/my-finance/debts', {
         name: debtForm.name.trim(),
         debt_type: debtForm.debt_type,
         lender_name: debtForm.lender_name,
-        principal_amount: principal,
+        principal_amount: debtForm.principal_amount ? Number(debtForm.principal_amount) : null,
         disbursed_amount: debtForm.disbursed_amount ? Number(debtForm.disbursed_amount) : null,
-        monthly_amount: monthly,
+        monthly_amount: debtForm.monthly_amount ? Number(debtForm.monthly_amount) : null,
+        frequency: debtForm.frequency,
         start_date: debtForm.start_date,
         end_date: debtForm.end_date || null,
         due_day: debtForm.due_day ? Number(debtForm.due_day) : null,
+        tenure_months: debtForm.tenure_months ? Number(debtForm.tenure_months) : null,
+        annual_interest_rate: debtForm.annual_interest_rate ? Number(debtForm.annual_interest_rate) : null,
+        principal_paid_date: debtForm.principal_paid_date || null,
         notes: debtForm.notes,
         log_as_income: debtForm.log_as_income,
         log_payments_as_expense: debtForm.log_payments_as_expense,
@@ -687,82 +713,204 @@ export default function MyFinancePage() {
         {/* Add Debt */}
         <Dialog open={showDebtModal} onOpenChange={setShowDebtModal}>
           <DialogContent className={`${bgCard} max-w-lg max-h-[85vh] overflow-y-auto`}>
-            <DialogHeader><DialogTitle className={textPrimary}>Add Debt / EMI / Chit</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <Label className={textPrimary}>Name *</Label>
-                <Input value={debtForm.name} onChange={(e) => setDebtForm({ ...debtForm, name: e.target.value })} className={inputCls} placeholder="e.g. Personal loan from Ramesh" autoFocus data-testid="my-finance-debt-name-input" />
-              </div>
-              <div>
-                <Label className={textPrimary}>Type</Label>
-                <Select value={debtForm.debt_type} onValueChange={(v) => setDebtForm({ ...debtForm, debt_type: v })}>
-                  <SelectTrigger className={inputCls} data-testid="my-finance-debt-type-select"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="loan">Loan (interest-only)</SelectItem>
-                    <SelectItem value="emi">EMI (fixed installment)</SelectItem>
-                    <SelectItem value="chit">Chit</SelectItem>
-                  </SelectContent>
-                </Select>
-                {debtForm.debt_type === 'emi' && (
-                  <p className={`text-[11px] mt-1 ${textSecondary}`}>Each month's amount already covers principal + interest, same as a bank EMI — needs an End Date since the tenure is fixed.</p>
-                )}
-              </div>
-              <div>
-                <Label className={textPrimary}>Lender / Chit Name</Label>
-                <Input value={debtForm.lender_name} onChange={(e) => setDebtForm({ ...debtForm, lender_name: e.target.value })} className={inputCls} />
-              </div>
-              <div>
-                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Total Value *' : debtForm.debt_type === 'emi' ? 'Loan Amount *' : 'Principal Amount *'}</Label>
-                <Input type="number" min="0" step="any" value={debtForm.principal_amount} onChange={(e) => setDebtForm({ ...debtForm, principal_amount: e.target.value })} className={inputCls} placeholder="2,00,000" data-testid="my-finance-debt-principal-input" />
-              </div>
-              <div>
-                <Label className={textPrimary}>Amount Actually Received</Label>
-                <Input type="number" min="0" step="any" value={debtForm.disbursed_amount} onChange={(e) => setDebtForm({ ...debtForm, disbursed_amount: e.target.value })} className={inputCls} placeholder="Defaults to the amount above" data-testid="my-finance-debt-disbursed-input" />
-              </div>
-              <div>
-                <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Monthly Contribution *' : debtForm.debt_type === 'emi' ? 'Monthly EMI Amount *' : 'Monthly Interest *'}</Label>
-                <Input type="number" min="0" step="any" value={debtForm.monthly_amount} onChange={(e) => setDebtForm({ ...debtForm, monthly_amount: e.target.value })} className={inputCls} placeholder="6,000" data-testid="my-finance-debt-monthly-input" />
-              </div>
-              <div>
-                <Label className={textPrimary}>Due Day of Month</Label>
-                <Input type="number" min="1" max="31" value={debtForm.due_day} onChange={(e) => setDebtForm({ ...debtForm, due_day: e.target.value })} className={inputCls} placeholder="Defaults to start date's day" />
-              </div>
-              <div>
-                <Label className={textPrimary}>Start Date *</Label>
-                <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} />
-              </div>
-              <div>
-                <Label className={textPrimary}>End Date{debtForm.debt_type === 'emi' ? ' *' : ''}</Label>
-                <Input type="date" value={debtForm.end_date} onChange={(e) => setDebtForm({ ...debtForm, end_date: e.target.value })} className={inputCls} placeholder={debtForm.debt_type === 'emi' ? undefined : 'Leave blank if ongoing'} data-testid="my-finance-debt-end-date-input" />
-              </div>
-              <div className="col-span-2">
-                <Label className={textPrimary}>Notes</Label>
-                <Textarea value={debtForm.notes} onChange={(e) => setDebtForm({ ...debtForm, notes: e.target.value })} rows={2} className={inputCls} />
-              </div>
-              {rates && (
-                <div className={`col-span-2 rounded-lg border ${borderColor} ${bgSecondary} p-3 text-xs ${textSecondary} space-y-1`} data-testid="my-finance-debt-rate-preview">
-                  <p className={`font-medium ${textPrimary}`}>Interest rate (calculated automatically)</p>
-                  <p>Nominal (on the stated amount): <span className={textPrimary}>{rates.nominal.toFixed(2)}%/month · {(rates.nominal * 12).toFixed(2)}%/year</span></p>
-                  {rates.differs && (
-                    <p>Effective (on what you actually received): <span className={textPrimary}>{rates.effective.toFixed(2)}%/month · {(rates.effective * 12).toFixed(2)}%/year</span></p>
+            {debtWizardStep === 'choose' ? (
+              <>
+                <DialogHeader><DialogTitle className={textPrimary}>What kind of debt is this?</DialogTitle></DialogHeader>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {DEBT_WIZARD_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.type} type="button" onClick={() => chooseDebtType(opt.type)}
+                        className={`text-left rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1] p-4 space-y-2 transition-colors`}
+                        data-testid={`my-finance-debt-wizard-${opt.type}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-5 w-5 text-[#6366f1]" />
+                          <p className={`font-semibold ${textPrimary}`}>{opt.title}</p>
+                        </div>
+                        <p className={`text-xs ${textSecondary}`}>{opt.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <DialogFooter><Button variant="ghost" onClick={() => setShowDebtModal(false)}>Cancel</Button></DialogFooter>
+              </>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                    <button type="button" onClick={() => setDebtWizardStep('choose')} className={textSecondary} title="Change type" data-testid="my-finance-debt-wizard-back">
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    Add {DEBT_WIZARD_OPTIONS.find((o) => o.type === debtForm.debt_type)?.title}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className={textPrimary}>Name *</Label>
+                    <Input value={debtForm.name} onChange={(e) => setDebtForm({ ...debtForm, name: e.target.value })} className={inputCls} placeholder="e.g. Personal loan from Ramesh" autoFocus data-testid="my-finance-debt-name-input" />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>{debtForm.debt_type === 'chit' ? 'Chit Group Name' : 'Provider / Lender'}</Label>
+                    <Input value={debtForm.lender_name} onChange={(e) => setDebtForm({ ...debtForm, lender_name: e.target.value })} className={inputCls} data-testid="my-finance-debt-lender-input" />
+                  </div>
+
+                  {/* ---- EMI ---- */}
+                  {debtForm.debt_type === 'emi' && (
+                    <>
+                      <div>
+                        <Label className={textPrimary}>Loan Amount *</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.principal_amount} onChange={(e) => setDebtForm({ ...debtForm, principal_amount: e.target.value })} className={inputCls} placeholder="5,00,000" data-testid="my-finance-debt-principal-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Start Date *</Label>
+                        <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>No. of EMI Months</Label>
+                        <Input type="number" min="1" value={debtForm.tenure_months} onChange={(e) => setDebtForm({ ...debtForm, tenure_months: e.target.value })} className={inputCls} placeholder="24" data-testid="my-finance-debt-tenure-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>End Date</Label>
+                        <Input type="date" value={debtForm.end_date} onChange={(e) => setDebtForm({ ...debtForm, end_date: e.target.value })} className={inputCls} placeholder="Or leave blank if using months" data-testid="my-finance-debt-end-date-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>EMI Date Every Month</Label>
+                        <Input type="number" min="1" max="31" value={debtForm.due_day} onChange={(e) => setDebtForm({ ...debtForm, due_day: e.target.value })} className={inputCls} placeholder="Defaults to start date's day" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Interest (% per year)</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.annual_interest_rate} onChange={(e) => setDebtForm({ ...debtForm, annual_interest_rate: e.target.value })} className={inputCls} placeholder="Optional — to work out the EMI" data-testid="my-finance-debt-rate-input" />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className={textPrimary}>EMI Amount{emiPreview ? '' : ' *'}</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.monthly_amount} onChange={(e) => setDebtForm({ ...debtForm, monthly_amount: e.target.value })} className={inputCls} placeholder={emiPreview ? `Calculated: ₹${emiPreview.toLocaleString('en-IN')}` : 'Enter directly if you already know it'} data-testid="my-finance-debt-monthly-input" />
+                        {emiPreview && <p className={`text-[11px] mt-1 ${textSecondary}`}>Calculated from the loan amount, interest, and tenure — override above if you know the exact EMI.</p>}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ---- Interest Based (loan) ---- */}
+                  {debtForm.debt_type === 'loan' && (
+                    <>
+                      <div>
+                        <Label className={textPrimary}>Loan Amount *</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.principal_amount} onChange={(e) => setDebtForm({ ...debtForm, principal_amount: e.target.value })} className={inputCls} placeholder="2,00,000" data-testid="my-finance-debt-principal-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Amount Actually Received</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.disbursed_amount} onChange={(e) => setDebtForm({ ...debtForm, disbursed_amount: e.target.value })} className={inputCls} placeholder="Defaults to the amount above" data-testid="my-finance-debt-disbursed-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Interest Amount *</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.monthly_amount} onChange={(e) => setDebtForm({ ...debtForm, monthly_amount: e.target.value })} className={inputCls} placeholder="6,000" data-testid="my-finance-debt-monthly-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Charged</Label>
+                        <Select value={debtForm.frequency} onValueChange={(v) => setDebtForm({ ...debtForm, frequency: v })}>
+                          <SelectTrigger className={inputCls} data-testid="my-finance-debt-frequency-select"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Start Date *</Label>
+                        <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} />
+                      </div>
+                      {debtForm.frequency === 'monthly' ? (
+                        <div>
+                          <Label className={textPrimary}>Interest Due Day of Month</Label>
+                          <Input type="number" min="1" max="31" value={debtForm.due_day} onChange={(e) => setDebtForm({ ...debtForm, due_day: e.target.value })} className={inputCls} placeholder="Defaults to start date's day" />
+                        </div>
+                      ) : (
+                        <div className="flex items-end">
+                          <p className={`text-[11px] ${textSecondary} pb-2`}>{debtForm.frequency === 'weekly' ? 'Due every 7 days from the start date.' : 'Due on the start date\'s day and month, every year.'}</p>
+                        </div>
+                      )}
+                      <div>
+                        <Label className={textPrimary}>End Date</Label>
+                        <Input type="date" value={debtForm.end_date} onChange={(e) => setDebtForm({ ...debtForm, end_date: e.target.value })} className={inputCls} placeholder="Leave blank if ongoing" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Principal Paid On</Label>
+                        <Input type="date" value={debtForm.principal_paid_date} onChange={(e) => setDebtForm({ ...debtForm, principal_paid_date: e.target.value })} className={inputCls} placeholder="If already settled" data-testid="my-finance-debt-principal-paid-input" />
+                      </div>
+                      {rates && (
+                        <div className={`col-span-2 rounded-lg border ${borderColor} ${bgSecondary} p-3 text-xs ${textSecondary} space-y-1`} data-testid="my-finance-debt-rate-preview">
+                          <p className={`font-medium ${textPrimary}`}>Interest rate (calculated automatically)</p>
+                          <p>Nominal (on the stated amount): <span className={textPrimary}>{rates.nominal.toFixed(2)}%/{debtForm.frequency === 'monthly' ? 'month' : debtForm.frequency === 'weekly' ? 'week' : 'year'} · {(rates.nominal * 12).toFixed(2)}%/year equiv.</span></p>
+                          {rates.differs && (
+                            <p>Effective (on what you actually received): <span className={textPrimary}>{rates.effective.toFixed(2)}%/{debtForm.frequency === 'monthly' ? 'month' : debtForm.frequency === 'weekly' ? 'week' : 'year'} · {(rates.effective * 12).toFixed(2)}%/year equiv.</span></p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ---- Chit ---- */}
+                  {debtForm.debt_type === 'chit' && (
+                    <>
+                      <div>
+                        <Label className={textPrimary}>Chit Amount *</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.monthly_amount} onChange={(e) => setDebtForm({ ...debtForm, monthly_amount: e.target.value })} className={inputCls} placeholder="5,000" data-testid="my-finance-debt-monthly-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Total Months *</Label>
+                        <Input type="number" min="1" value={debtForm.tenure_months} onChange={(e) => setDebtForm({ ...debtForm, tenure_months: e.target.value })} className={inputCls} placeholder="20" data-testid="my-finance-debt-tenure-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Start Date *</Label>
+                        <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Chit Date Every Month</Label>
+                        <Input type="number" min="1" max="31" value={debtForm.due_day} onChange={(e) => setDebtForm({ ...debtForm, due_day: e.target.value })} className={inputCls} placeholder="Defaults to start date's day" />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ---- Normal Debt ---- */}
+                  {debtForm.debt_type === 'normal' && (
+                    <>
+                      <div>
+                        <Label className={textPrimary}>Amount *</Label>
+                        <Input type="number" min="0" step="any" value={debtForm.principal_amount} onChange={(e) => setDebtForm({ ...debtForm, principal_amount: e.target.value })} className={inputCls} placeholder="5,000" data-testid="my-finance-debt-principal-input" />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Due Date *</Label>
+                        <Input type="date" value={debtForm.start_date} onChange={(e) => setDebtForm({ ...debtForm, start_date: e.target.value })} className={inputCls} data-testid="my-finance-debt-duedate-input" />
+                      </div>
+                      <p className={`col-span-2 text-[11px] ${textSecondary}`}>Once added, pay it partly or in full any time from its row below.</p>
+                    </>
+                  )}
+
+                  <div className="col-span-2">
+                    <Label className={textPrimary}>Notes</Label>
+                    <Textarea value={debtForm.notes} onChange={(e) => setDebtForm({ ...debtForm, notes: e.target.value })} rows={2} className={inputCls} />
+                  </div>
+                  <label className="col-span-2 flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={debtForm.log_as_income} onChange={(e) => setDebtForm({ ...debtForm, log_as_income: e.target.checked })} />
+                    <span className={textSecondary}>Also record the received amount as an Income entry</span>
+                  </label>
+                  {debtForm.debt_type !== 'normal' && (
+                    <label className="col-span-2 flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={debtForm.log_payments_as_expense} onChange={(e) => setDebtForm({ ...debtForm, log_payments_as_expense: e.target.checked })} />
+                      <span className={textSecondary}>Also record each payment as an Expense entry</span>
+                    </label>
                   )}
                 </div>
-              )}
-              <label className="col-span-2 flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={debtForm.log_as_income} onChange={(e) => setDebtForm({ ...debtForm, log_as_income: e.target.checked })} />
-                <span className={textSecondary}>Also record the received amount as an Income entry</span>
-              </label>
-              <label className="col-span-2 flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={debtForm.log_payments_as_expense} onChange={(e) => setDebtForm({ ...debtForm, log_payments_as_expense: e.target.checked })} />
-                <span className={textSecondary}>Also record each payment as an Expense entry</span>
-              </label>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowDebtModal(false)}>Cancel</Button>
-              <Button onClick={saveDebt} disabled={debtSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-debt-save-btn">
-                {debtSaving ? 'Saving…' : 'Add Debt'}
-              </Button>
-            </DialogFooter>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setShowDebtModal(false)}>Cancel</Button>
+                  <Button onClick={saveDebt} disabled={debtSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-debt-save-btn">
+                    {debtSaving ? 'Saving…' : 'Add Debt'}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
 

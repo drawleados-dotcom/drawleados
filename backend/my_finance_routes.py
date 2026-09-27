@@ -20,19 +20,27 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 my_finance_router = APIRouter(prefix="/my-finance", tags=["my-finance"])
 
-# "loan" — interest-only: the monthly amount is pure interest, the principal
-#   itself is settled separately (or never, if it's rolled over) — this is
+# "loan" — interest-only: the recurring amount is pure interest, on whatever
+#   cycle it's actually charged (monthly/weekly/yearly — see FREQUENCIES); the
+#   principal itself is settled separately, tracked as a one-off reference
+#   date (principal_paid_date), not part of the recurring schedule. This is
 #   the ₹2L-at-₹6k/month kind of arrangement. Interest rate is computed.
 # "emi" — a fixed-tenure installment: the monthly amount already blends
-#   principal + interest and fully closes the debt by end_date (which is
-#   required for this type). No rate is computed — the amount itself is
-#   what's owed each month, same as a bank EMI statement already shows.
+#   principal + interest and fully closes the debt by end_date. Either typed
+#   directly, or computed from principal + annual_interest_rate + tenure via
+#   the standard reducing-balance EMI formula. No rate is computed/shown —
+#   the amount itself is what's owed each month, same as a bank statement.
 # "chit" — a periodic contribution, no interest concept at all.
-DEBT_TYPES = {"loan", "emi", "chit"}
+# "normal" — a one-off debt: a single amount, a single due date, paid off
+#   (partially or fully) whenever — not a recurring schedule at all. Modeled
+#   as a schedule of exactly one period by setting end_date = start_date, so
+#   every existing schedule/payment/status code path just works unmodified.
+DEBT_TYPES = {"loan", "emi", "chit", "normal"}
+FREQUENCIES = {"monthly", "weekly", "yearly"}
 INCOME_SOURCES = {"salary", "debt", "other"}
 
 
@@ -54,9 +62,27 @@ def _add_months(d: date, n: int) -> date:
     return date(year, month, 1)
 
 
+def _add_years(d: date, n: int) -> date:
+    year = d.year + n
+    try:
+        return date(year, d.month, d.day)
+    except ValueError:  # Feb 29 landing on a non-leap year
+        return date(year, d.month, 28)
+
+
 def _due_date_in(year: int, month: int, due_day: int) -> date:
     last_day = calendar.monthrange(year, month)[1]
     return date(year, month, min(due_day, last_day))
+
+
+def _emi_amount(principal: float, annual_rate_pct: float, tenure_months: int) -> float:
+    """Standard reducing-balance EMI formula: EMI = P·r·(1+r)^n / ((1+r)^n − 1),
+    r = monthly rate. A 0% rate degrades to a plain principal/tenure split."""
+    r = annual_rate_pct / 12 / 100
+    if r == 0:
+        return round(principal / tenure_months, 2)
+    factor = (1 + r) ** tenure_months
+    return round(principal * r * factor / (factor - 1), 2)
 
 
 # ------------------------------------------------------------------ Income
@@ -225,12 +251,16 @@ class DebtCreate(BaseModel):
     name: str
     debt_type: str = "loan"
     lender_name: Optional[str] = ""
-    principal_amount: float
+    principal_amount: Optional[float] = None  # required for loan/emi; optional for chit/normal (see create_debt)
     disbursed_amount: Optional[float] = None  # defaults to principal_amount if not given
-    monthly_amount: float  # monthly interest (loan) or contribution (chit)
+    monthly_amount: Optional[float] = None  # interest (loan) / EMI (emi — or computed, see below) / contribution (chit)
+    frequency: str = "monthly"  # monthly | weekly | yearly — how often monthly_amount recurs (loan mainly)
     start_date: str
     end_date: Optional[str] = None
-    due_day: Optional[int] = None  # 1-31; defaults to start_date's day
+    due_day: Optional[int] = None  # 1-31; monthly only; defaults to start_date's day
+    tenure_months: Optional[int] = None  # emi/chit: derives end_date from start_date if end_date isn't given
+    annual_interest_rate: Optional[float] = None  # emi: with principal+tenure, computes monthly_amount if it's blank
+    principal_paid_date: Optional[str] = None  # loan: a one-off reference date, not part of the recurring schedule
     notes: Optional[str] = ""
     log_as_income: bool = True  # also record the disbursed amount as an Income entry
     log_payments_as_expense: bool = True  # also record each future payment as an Expense entry
@@ -242,24 +272,28 @@ class DebtUpdate(BaseModel):
     principal_amount: Optional[float] = None
     disbursed_amount: Optional[float] = None
     monthly_amount: Optional[float] = None
+    frequency: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     due_day: Optional[int] = None
+    principal_paid_date: Optional[str] = None
     notes: Optional[str] = None
     status: Optional[str] = None  # active | closed
     log_payments_as_expense: Optional[bool] = None
 
 
 class DebtPayment(BaseModel):
-    period: Optional[str] = None  # "YYYY-MM"; defaults to the current calendar month
+    period: Optional[str] = None  # matches the schedule row's own period key; defaults to today's
     amount: float
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today
     note: Optional[str] = ""
 
 
-def _validate_debt_fields(debt_type, principal, disbursed, monthly, due_day):
+def _validate_debt_fields(debt_type, principal, disbursed, monthly, due_day, frequency=None):
     if debt_type is not None and debt_type not in DEBT_TYPES:
         raise HTTPException(status_code=400, detail=f"debt_type must be one of {sorted(DEBT_TYPES)}")
+    if frequency is not None and frequency not in FREQUENCIES:
+        raise HTTPException(status_code=400, detail=f"frequency must be one of {sorted(FREQUENCIES)}")
     if principal is not None and principal <= 0:
         raise HTTPException(status_code=400, detail="Principal amount must be more than 0")
     if disbursed is not None and disbursed <= 0:
@@ -283,21 +317,45 @@ def _rates(debt_type: str, principal: float, disbursed: float, monthly_amount: f
 
 
 def _schedule(debt: dict, today: date) -> dict:
-    """The full month-by-month due schedule from start_date through end_date
-    (or through the current month, if the debt is open-ended)."""
+    """The full due schedule from start_date through end_date (or through
+    today, if open-ended), stepped by the debt's frequency — monthly (the
+    default), weekly, or yearly, all anchored to start_date the same way the
+    existing monthly due_day already was. A "normal" (one-off) debt has
+    end_date forced equal to start_date at creation, so this naturally
+    produces exactly one row for it with no special-casing needed here."""
     start = _parse_date(debt["start_date"], "start_date")
-    due_day = debt.get("due_day") or start.day
     end = _parse_date(debt["end_date"], "end_date") if debt.get("end_date") else None
-    stop_month = _month_start(end) if end else _month_start(max(start, today))
+    frequency = debt.get("frequency") or "monthly"
+
+    if frequency == "monthly":
+        due_day = debt.get("due_day") or start.day
+        anchor = _month_start(start)
+        stop = _month_start(end) if end else _month_start(max(start, today))
+        step = lambda n: _add_months(anchor, n)
+        due_for = lambda cursor: _due_date_in(cursor.year, cursor.month, due_day)
+        key_for = lambda cursor: f"{cursor.year:04d}-{cursor.month:02d}"
+    elif frequency == "weekly":
+        anchor = start
+        stop = end if end else max(start, today)
+        step = lambda n: anchor + timedelta(weeks=n)
+        due_for = lambda cursor: cursor
+        key_for = lambda cursor: cursor.isoformat()
+    else:  # yearly
+        anchor = start
+        stop = end if end else max(start, today)
+        step = lambda n: _add_years(anchor, n)
+        due_for = lambda cursor: cursor
+        key_for = lambda cursor: f"{cursor.year:04d}"
 
     by_period: dict = {}
     for p in debt.get("payments") or []:
         by_period.setdefault(p["period"], []).append(p)
 
-    rows, cursor, guard = [], _month_start(start), 0
-    while cursor <= stop_month and guard < 1200:  # 100-year hard cap
-        period = f"{cursor.year:04d}-{cursor.month:02d}"
-        due_date = _due_date_in(cursor.year, cursor.month, due_day)
+    rows, n, guard = [], 0, 0
+    cursor = step(0)
+    while cursor <= stop and guard < 2000:  # generous cap regardless of frequency
+        period = key_for(cursor)
+        due_date = due_for(cursor)
         pays = by_period.get(period, [])
         paid = round(sum(p["amount"] for p in pays), 2)
         due = debt["monthly_amount"]
@@ -311,7 +369,8 @@ def _schedule(debt: dict, today: date) -> dict:
             "period": period, "due_date": due_date.isoformat(), "amount_due": due,
             "amount_paid": paid, "balance": round(due - paid, 2), "status": status, "payments": pays,
         })
-        cursor = _add_months(cursor, 1)
+        n += 1
+        cursor = step(n)
         guard += 1
 
     total_due = round(sum(r["amount_due"] for r in rows), 2)
@@ -324,7 +383,7 @@ def _schedule(debt: dict, today: date) -> dict:
             "months_elapsed": len(rows), "months_total": (len(rows) if end else None),
             "total_due": total_due, "total_paid": total_paid, "outstanding": round(total_due - total_paid, 2),
             "next_due": next_due, "overdue_count": overdue_count,
-            "fully_settled": bool(end) and overdue_count == 0 and all(r["status"] == "paid" for r in rows) and cursor > _month_start(end),
+            "fully_settled": bool(end) and overdue_count == 0 and all(r["status"] == "paid" for r in rows) and cursor > stop,
         },
     }
 
@@ -352,29 +411,80 @@ async def create_debt(payload: DebtCreate, request: Request):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
-    _validate_debt_fields(payload.debt_type, payload.principal_amount, payload.disbursed_amount, payload.monthly_amount, payload.due_day)
+    if payload.debt_type not in DEBT_TYPES:
+        raise HTTPException(status_code=400, detail=f"debt_type must be one of {sorted(DEBT_TYPES)}")
+    if payload.frequency not in FREQUENCIES:
+        raise HTTPException(status_code=400, detail=f"frequency must be one of {sorted(FREQUENCIES)}")
     start = _parse_date(payload.start_date, "start_date")
-    if payload.debt_type == "emi" and not payload.end_date:
-        raise HTTPException(status_code=400, detail="An EMI needs an end date — it's a fixed-tenure installment, not an open-ended one")
-    if payload.end_date:
-        end = _parse_date(payload.end_date, "end_date")
+
+    debt_type = payload.debt_type
+    principal = payload.principal_amount
+    monthly = payload.monthly_amount
+    end_date = payload.end_date
+    frequency = payload.frequency if debt_type == "loan" else "monthly"
+    due_day = payload.due_day or start.day
+
+    if debt_type == "normal":
+        # A one-off debt: exactly one amount, due once. Forcing end_date =
+        # start_date makes _schedule() produce exactly one period, so every
+        # existing payment/status code path applies with no special-casing.
+        if not principal or principal <= 0:
+            raise HTTPException(status_code=400, detail="Enter the amount owed")
+        monthly = principal
+        end_date = payload.start_date
+    else:
+        if debt_type in ("emi", "chit") and payload.tenure_months and not end_date:
+            end_date = _add_months(start, payload.tenure_months - 1).isoformat()
+        if debt_type == "emi":
+            if not payload.end_date and not payload.tenure_months:
+                raise HTTPException(status_code=400, detail="An EMI needs an end date or a number of months — it's a fixed-tenure installment")
+            if not principal or principal <= 0:
+                raise HTTPException(status_code=400, detail="Enter the loan amount")
+            if not monthly or monthly <= 0:
+                if not payload.annual_interest_rate or payload.annual_interest_rate <= 0:
+                    raise HTTPException(status_code=400, detail="Enter the EMI amount, or an interest rate to calculate it from the loan amount and tenure")
+                tenure = payload.tenure_months
+                if not tenure:
+                    end_d = _parse_date(end_date, "end_date")
+                    tenure = (end_d.year - start.year) * 12 + (end_d.month - start.month) + 1
+                monthly = _emi_amount(principal, payload.annual_interest_rate, tenure)
+        elif debt_type == "chit":
+            if not monthly or monthly <= 0:
+                raise HTTPException(status_code=400, detail="Enter the chit amount")
+            if not principal or principal <= 0:
+                principal = monthly * (payload.tenure_months or 1)
+        else:  # loan
+            if not principal or principal <= 0:
+                raise HTTPException(status_code=400, detail="Enter the loan amount")
+            if not monthly or monthly <= 0:
+                raise HTTPException(status_code=400, detail="Enter the interest amount")
+
+    if end_date:
+        end = _parse_date(end_date, "end_date")
         if end < start:
             raise HTTPException(status_code=400, detail="end_date can't be before start_date")
+    if payload.principal_paid_date:
+        _parse_date(payload.principal_paid_date, "principal_paid_date")
+    _validate_debt_fields(None, principal, payload.disbursed_amount, monthly, due_day)
 
-    disbursed = payload.disbursed_amount if payload.disbursed_amount is not None else payload.principal_amount
+    disbursed = payload.disbursed_amount if payload.disbursed_amount is not None else principal
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "debt_id": f"mydebt_{uuid.uuid4().hex[:10]}",
         "user_id": user.user_id,
         "name": name,
-        "debt_type": payload.debt_type if payload.debt_type in DEBT_TYPES else "loan",
+        "debt_type": debt_type,
         "lender_name": (payload.lender_name or "").strip(),
-        "principal_amount": round(payload.principal_amount, 2),
+        "principal_amount": round(principal, 2),
         "disbursed_amount": round(disbursed, 2),
-        "monthly_amount": round(payload.monthly_amount, 2),
+        "monthly_amount": round(monthly, 2),
+        "frequency": frequency,
         "start_date": payload.start_date,
-        "end_date": payload.end_date,
-        "due_day": payload.due_day or start.day,
+        "end_date": end_date,
+        "due_day": due_day,
+        "tenure_months": payload.tenure_months,
+        "annual_interest_rate": payload.annual_interest_rate,
+        "principal_paid_date": payload.principal_paid_date,
         "notes": (payload.notes or "").strip(),
         "status": "active",
         "log_payments_as_expense": payload.log_payments_as_expense,
@@ -402,13 +512,15 @@ async def update_debt(debt_id: str, payload: DebtUpdate, request: Request):
     existing = await db.my_finance_debts.find_one({"debt_id": debt_id, "user_id": user.user_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Debt not found")
-    _validate_debt_fields(None, payload.principal_amount, payload.disbursed_amount, payload.monthly_amount, payload.due_day)
+    _validate_debt_fields(None, payload.principal_amount, payload.disbursed_amount, payload.monthly_amount, payload.due_day, payload.frequency)
     if payload.status is not None and payload.status not in ("active", "closed"):
         raise HTTPException(status_code=400, detail="status must be active or closed")
     if payload.start_date is not None:
         _parse_date(payload.start_date, "start_date")
     if payload.end_date is not None:
         _parse_date(payload.end_date, "end_date")
+    if payload.principal_paid_date is not None:
+        _parse_date(payload.principal_paid_date, "principal_paid_date")
 
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
     for money_field in ("principal_amount", "disbursed_amount", "monthly_amount"):
