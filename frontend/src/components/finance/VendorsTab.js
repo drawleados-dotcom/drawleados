@@ -21,7 +21,8 @@ import {
 } from '../ui/alert-dialog';
 
 const API = process.env.REACT_APP_BACKEND_URL;
-const emptyDraft = { name: '', contact_person: '', phone: '', email: '', address: '', notes: '' };
+const emptyDraft = { name: '', contact_person: '', phone: '', email: '', address: '', notes: '', monthly_amount: '' };
+const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
 const VendorsTab = () => {
   const token = localStorage.getItem('session_token');
@@ -53,6 +54,7 @@ const VendorsTab = () => {
     setDraft({
       name: v.name, contact_person: v.contact_person || '', phone: v.phone || '',
       email: v.email || '', address: v.address || '', notes: v.notes || '',
+      monthly_amount: v.monthly_amount ? String(v.monthly_amount) : '',
     });
     setModal({ vendorId: v.vendor_id });
   };
@@ -62,11 +64,12 @@ const VendorsTab = () => {
     if (!draft.name.trim()) { toast.error('Vendor name is required'); return; }
     setSaving(true);
     try {
+      const payload = { ...draft, monthly_amount: draft.monthly_amount ? Number(draft.monthly_amount) : 0 };
       if (modal.vendorId) {
-        await axios.put(`${API}/api/finance/vendors/${modal.vendorId}`, draft, { headers });
+        await axios.put(`${API}/api/finance/vendors/${modal.vendorId}`, payload, { headers });
         toast.success('Vendor updated');
       } else {
-        await axios.post(`${API}/api/finance/vendors`, draft, { headers });
+        await axios.post(`${API}/api/finance/vendors`, payload, { headers });
         toast.success('Vendor added');
       }
       closeModal();
@@ -140,6 +143,9 @@ const VendorsTab = () => {
                   <p className="text-xs text-gray-600 dark:text-[#a1a1aa] flex items-center gap-1.5"><Mail className="h-3 w-3" /> {v.email}</p>
                 )}
               </div>
+              {v.monthly_amount > 0 && (
+                <p className="text-xs font-medium text-[#6366f1] mt-2">{fmtINR(v.monthly_amount)}/month</p>
+              )}
               {v.address && <p className="text-[11px] text-gray-500 dark:text-[#71717a] mt-2">{v.address}</p>}
               {v.notes && <p className="text-[11px] text-gray-500 dark:text-[#71717a] mt-1 italic">"{v.notes}"</p>}
             </div>
@@ -179,6 +185,10 @@ const VendorsTab = () => {
             <div>
               <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Notes</Label>
               <Input value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} data-testid="vendors-form-notes" />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Monthly Amount (optional — for Fixed Expense tracking)</Label>
+              <Input type="number" min="0" value={draft.monthly_amount} onChange={(e) => setDraft((d) => ({ ...d, monthly_amount: e.target.value }))} data-testid="vendors-form-monthly-amount" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={closeModal} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>

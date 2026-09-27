@@ -12,6 +12,7 @@ import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import WeekWiseTab from './WeekWiseTab';
 import ClientsTab from './ClientsTab';
 import ExpenseSplitTab from './ExpenseSplitTab';
+import FixedExpenseView from './FixedExpenseView';
 import MasterExpenseView from './MasterExpenseView';
 import BudgetView from './BudgetView';
 import PayrollTab from './PayrollTab';
@@ -173,7 +174,7 @@ const ExpenseTab = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll | tools_subscription | vendors | forecasting
+  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | fixed_expense | budget | payroll | tools_subscription | vendors | forecasting
   const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
   const [dashboardSubTab, setDashboardSubTab] = useState('dashboard'); // dashboard | weekly | payment_schedule
@@ -2142,6 +2143,13 @@ const ExpenseTab = () => {
                     Expense Split
                   </button>
                   <button
+                    onClick={() => setExpenseSubTab('fixed_expense')}
+                    data-testid="expense-subtab-fixed-expense"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'fixed_expense' ? activeCls : idleCls}`}
+                  >
+                    Fixed Expense
+                  </button>
+                  <button
                     onClick={() => setExpenseSubTab('budget')}
                     data-testid="expense-subtab-budget"
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'budget' ? activeCls : idleCls}`}
@@ -2179,6 +2187,7 @@ const ExpenseTab = () => {
                 </div>
                 {expenseSubTab === 'categories' && <MasterExpenseView onAddPayrollExpense={jumpToPayrollExpense} />}
                 {expenseSubTab === 'split' && <ExpenseSplitTab />}
+                {expenseSubTab === 'fixed_expense' && <FixedExpenseView />}
                 {expenseSubTab === 'budget' && <BudgetView />}
                 {expenseSubTab === 'payroll' && <PayrollTab />}
                 {expenseSubTab === 'tools_subscription' && <ToolsSubscriptionTab />}
