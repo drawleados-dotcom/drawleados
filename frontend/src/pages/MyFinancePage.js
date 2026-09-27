@@ -209,6 +209,22 @@ export default function MyFinancePage() {
     return Math.round((p * r * factor) / (factor - 1) * 100) / 100;
   }, [debtForm.debt_type, debtForm.principal_amount, debtForm.annual_interest_rate, debtForm.tenure_months, debtForm.monthly_amount]);
 
+  // Debt Management summary cards — total outstanding, total paid, and a
+  // per-type (EMI / Interest Based / Chit / Normal) breakdown, all derived
+  // from the already-loaded debts list rather than a separate fetch.
+  const debtTypeSummary = useMemo(() => {
+    const totals = { emi: { count: 0, outstanding: 0 }, loan: { count: 0, outstanding: 0 }, chit: { count: 0, outstanding: 0 }, normal: { count: 0, outstanding: 0 } };
+    let totalOutstanding = 0, totalPaid = 0;
+    debts.forEach((d) => {
+      const t = totals[d.debt_type] || totals.loan;
+      t.count += 1;
+      t.outstanding += d.summary?.outstanding || 0;
+      totalOutstanding += d.summary?.outstanding || 0;
+      totalPaid += d.summary?.total_paid || 0;
+    });
+    return { totals, totalOutstanding, totalPaid };
+  }, [debts]);
+
   const openAddDebt = () => { setDebtForm(emptyDebtForm()); setDebtWizardStep('choose'); setShowDebtModal(true); };
   const chooseDebtType = (type) => { setDebtForm(emptyDebtForm(type)); setDebtWizardStep('form'); };
   const saveDebt = async () => {
@@ -525,6 +541,24 @@ export default function MyFinancePage() {
 
             {activeTab === 'debts' && (
               <div className="space-y-3">
+                {debts.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid="my-finance-debt-summary-total">
+                      <p className={`text-xs ${textSecondary}`}>Total Debt Outstanding</p>
+                      <p className="text-xl font-bold text-[#f59e0b]">{money(debtTypeSummary.totalOutstanding)}</p>
+                    </div>
+                    <div className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid="my-finance-debt-summary-paid">
+                      <p className={`text-xs ${textSecondary}`}>Total Paid</p>
+                      <p className="text-xl font-bold text-[#10b981]">{money(debtTypeSummary.totalPaid)}</p>
+                    </div>
+                    {DEBT_WIZARD_OPTIONS.map((opt) => (
+                      <div key={opt.type} className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid={`my-finance-debt-summary-${opt.type}`}>
+                        <p className={`text-xs ${textSecondary}`}>{opt.title} ({debtTypeSummary.totals[opt.type].count})</p>
+                        <p className={`text-xl font-bold ${textPrimary}`}>{money(debtTypeSummary.totals[opt.type].outstanding)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex justify-end">
                   <Button onClick={openAddDebt} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="my-finance-add-debt-btn">
                     <Plus className="h-4 w-4 mr-2" /> Add Debt / EMI / Chit
