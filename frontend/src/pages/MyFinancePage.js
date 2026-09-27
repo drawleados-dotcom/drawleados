@@ -261,7 +261,11 @@ export default function MyFinancePage() {
   };
 
   const [payDraft, setPayDraft] = useState({}); // period -> amount string, for the detail popup
-  const [paySaving, setPaySaving] = useState(null); // period being submitted
+  // Pay / Full / Edit all open this one popup — it always asks for both the
+  // amount and the date the payment was actually made, since that date is
+  // what timeliness (on-time vs. late) is computed from.
+  const [payPopup, setPayPopup] = useState(null); // { debtId, period, dueDate, amount, date, mode: 'add'|'edit', paymentId }
+  const [payPopupSaving, setPayPopupSaving] = useState(false);
   // A payment can auto-log a matching Expense (see the backend) — refresh
   // just those totals/lists in the background rather than the whole page.
   const refreshLedger = async () => {
@@ -276,22 +280,38 @@ export default function MyFinancePage() {
       setTransactions(t.data || []);
     } catch (error) { /* background refresh — non-critical */ }
   };
-  const payPeriod = async (debtId, period, amount) => {
-    const amt = Number(amount);
+  const openPayPopup = (debt, row, prefillAmount) => {
+    setPayPopup({
+      debtId: debt.debt_id, debtName: debt.name, period: row.period, dueDate: row.due_date,
+      amount: String(prefillAmount ?? row.balance), date: todayISO(), mode: 'add', paymentId: null,
+    });
+  };
+  const openEditPayPopup = (debt, row, payment) => {
+    setPayPopup({
+      debtId: debt.debt_id, debtName: debt.name, period: row.period, dueDate: row.due_date,
+      amount: String(payment.amount), date: payment.date, mode: 'edit', paymentId: payment.payment_id,
+    });
+  };
+  const submitPayPopup = async () => {
+    if (!payPopup) return;
+    const amt = Number(payPopup.amount);
     if (!(amt > 0)) { toast.error('Enter an amount greater than 0'); return; }
-    setPaySaving(period);
+    if (!payPopup.date) { toast.error('Pick the payment date'); return; }
+    setPayPopupSaving(true);
     try {
-      const res = await api.post(`/my-finance/debts/${debtId}/payments`, { period, amount: amt });
-      setDebts((prev) => prev.map((d) => (d.debt_id === debtId ? res.data : d)));
-      // Only touch the Payment History popup if it's already open on this same debt.
-      setDebtDetail((prev) => (prev && prev.debt_id === debtId ? res.data : prev));
-      setPayDraft((prev) => ({ ...prev, [`${debtId}:${period}`]: '' }));
-      toast.success('Payment recorded');
+      const res = payPopup.mode === 'edit'
+        ? await api.put(`/my-finance/debts/${payPopup.debtId}/payments/${payPopup.paymentId}`, { amount: amt, date: payPopup.date })
+        : await api.post(`/my-finance/debts/${payPopup.debtId}/payments`, { period: payPopup.period, amount: amt, date: payPopup.date });
+      setDebts((prev) => prev.map((d) => (d.debt_id === payPopup.debtId ? res.data : d)));
+      setDebtDetail((prev) => (prev && prev.debt_id === payPopup.debtId ? res.data : prev));
+      setPayDraft((prev) => ({ ...prev, [`${payPopup.debtId}:${payPopup.period}`]: '' }));
+      toast.success(payPopup.mode === 'edit' ? 'Payment updated' : 'Payment recorded');
+      setPayPopup(null);
       refreshLedger();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to record payment');
+      toast.error(error.response?.data?.detail || 'Failed to save payment');
     } finally {
-      setPaySaving(null);
+      setPayPopupSaving(false);
     }
   };
   const undoPayment = async (debtId, paymentId) => {
@@ -570,6 +590,7 @@ export default function MyFinancePage() {
                                       <th className={`px-3 py-2 text-right font-medium ${textSecondary}`}>Paid</th>
                                       <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Status</th>
                                       <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Pay</th>
+                                      <th className={`px-3 py-2 text-left font-medium ${textSecondary}`}>Timeliness</th>
                                     </tr>
                                   </thead>
                                   <tbody className={`divide-y ${borderColor}`}>
@@ -585,7 +606,21 @@ export default function MyFinancePage() {
                                           <td className="px-3 py-2"><Badge className={`border ${meta.cls}`}>{meta.label}</Badge></td>
                                           <td className="px-3 py-2">
                                             {settled ? (
-                                              row.payments.length > 0 && <Button variant="ghost" size="sm" onClick={() => setDebtDetail(d)} data-testid={`my-finance-debt-history-${d.debt_id}-${row.period}`}>View</Button>
+                                              row.payments.length > 0 && (
+                                                <div className="flex items-center gap-1">
+                                                  <Button variant="ghost" size="sm" onClick={() => setDebtDetail(d)} data-testid={`my-finance-debt-history-${d.debt_id}-${row.period}`}>View</Button>
+                                                  {!closed && (
+                                                    <Button
+                                                      variant="ghost" size="sm"
+                                                      onClick={() => openEditPayPopup(d, row, row.payments[row.payments.length - 1])}
+                                                      title="Edit this payment"
+                                                      data-testid={`my-finance-pay-edit-${d.debt_id}-${row.period}`}
+                                                    >
+                                                      <Pencil className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              )
                                             ) : !closed ? (
                                               <div className="flex items-center gap-1">
                                                 <Input
@@ -597,16 +632,14 @@ export default function MyFinancePage() {
                                                 />
                                                 <Button
                                                   size="sm" className="h-7 bg-[#10b981] hover:bg-[#0d9668] text-white"
-                                                  disabled={paySaving === row.period}
-                                                  onClick={() => payPeriod(d.debt_id, row.period, payDraft[`${d.debt_id}:${row.period}`] || row.balance)}
+                                                  onClick={() => openPayPopup(d, row, payDraft[`${d.debt_id}:${row.period}`])}
                                                   data-testid={`my-finance-pay-btn-${d.debt_id}-${row.period}`}
                                                 >
-                                                  {paySaving === row.period ? '…' : 'Pay'}
+                                                  Pay
                                                 </Button>
                                                 <Button
                                                   variant="outline" size="sm" className="h-7"
-                                                  disabled={paySaving === row.period}
-                                                  onClick={() => payPeriod(d.debt_id, row.period, row.balance)}
+                                                  onClick={() => openPayPopup(d, row, row.balance)}
                                                   title="Pay the full amount due"
                                                   data-testid={`my-finance-pay-full-${d.debt_id}-${row.period}`}
                                                 >
@@ -614,6 +647,15 @@ export default function MyFinancePage() {
                                                 </Button>
                                               </div>
                                             ) : '—'}
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            {row.on_time === null || row.on_time === undefined ? (
+                                              <span className={textSecondary}>—</span>
+                                            ) : row.on_time ? (
+                                              <span className="text-[#10b981] font-medium">On-time</span>
+                                            ) : (
+                                              <span className="text-red-500 font-medium">Late by {row.days_late} day{row.days_late === 1 ? '' : 's'}</span>
+                                            )}
                                           </td>
                                         </tr>
                                       );
@@ -924,21 +966,69 @@ export default function MyFinancePage() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-2">
-              {debtDetail && (debtDetail.schedule || []).flatMap((row) => row.payments.map((p) => ({ ...p, period: row.period }))).length === 0 ? (
+              {debtDetail && (debtDetail.schedule || []).flatMap((row) => row.payments.map((p) => ({ ...p, row }))).length === 0 ? (
                 <p className={`text-sm ${textSecondary} text-center py-4`}>No payments recorded yet.</p>
               ) : (
-                debtDetail && (debtDetail.schedule || []).flatMap((row) => row.payments.map((p) => ({ ...p, period: row.period }))).map((p) => (
+                debtDetail && (debtDetail.schedule || []).flatMap((row) => row.payments.map((p) => ({ ...p, row }))).map((p) => (
                   <div key={p.payment_id} className={`flex items-center justify-between p-2 rounded-md border ${borderColor}`}>
                     <div>
-                      <p className={`text-sm ${textPrimary}`}>{money(p.amount)} <span className={textSecondary}>· {monthLabel(p.period)}</span></p>
+                      <p className={`text-sm ${textPrimary}`}>{money(p.amount)} <span className={textSecondary}>· {monthLabel(p.row.period)}</span></p>
                       <p className={`text-xs ${textSecondary}`}>{fmtDate(p.date)}{p.note ? ` · ${p.note}` : ''}</p>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-red-500" onClick={() => undoPayment(debtDetail.debt_id, p.payment_id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditPayPopup(debtDetail, p.row, p)} title="Edit this payment"><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="sm" className="text-red-500" onClick={() => undoPayment(debtDetail.debt_id, p.payment_id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
                   </div>
                 ))
               )}
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setDebtDetail(null)}>Close</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pay / Full / Edit — one popup asking for amount + the date the payment was actually made */}
+        <Dialog open={!!payPopup} onOpenChange={(o) => { if (!o) setPayPopup(null); }}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader><DialogTitle className={textPrimary}>{payPopup?.mode === 'edit' ? 'Edit Payment' : 'Record Payment'}</DialogTitle></DialogHeader>
+            {payPopup && (
+              <div className="space-y-3">
+                <p className={`text-xs ${textSecondary}`}>{payPopup.debtName} · {monthLabel(payPopup.period)} · Due {fmtDate(payPopup.dueDate)}</p>
+                <div>
+                  <Label className={textPrimary}>Amount *</Label>
+                  <Input
+                    type="number" min="0" step="any" autoFocus
+                    value={payPopup.amount}
+                    onChange={(e) => setPayPopup((prev) => ({ ...prev, amount: e.target.value }))}
+                    className={inputCls} data-testid="my-finance-pay-popup-amount"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Payment Date *</Label>
+                  <Input
+                    type="date"
+                    value={payPopup.date}
+                    onChange={(e) => setPayPopup((prev) => ({ ...prev, date: e.target.value }))}
+                    className={inputCls} data-testid="my-finance-pay-popup-date"
+                  />
+                  {payPopup.date && payPopup.dueDate && (
+                    payPopup.date > payPopup.dueDate ? (
+                      <p className="text-[11px] mt-1 text-red-500">
+                        Late by {Math.round((new Date(`${payPopup.date}T00:00:00`) - new Date(`${payPopup.dueDate}T00:00:00`)) / 86400000)} day(s)
+                      </p>
+                    ) : (
+                      <p className="text-[11px] mt-1 text-[#10b981]">On-time</p>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPayPopup(null)}>Cancel</Button>
+              <Button onClick={submitPayPopup} disabled={payPopupSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="my-finance-pay-popup-save">
+                {payPopupSaving ? 'Saving…' : payPopup?.mode === 'edit' ? 'Save Changes' : 'Record Payment'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

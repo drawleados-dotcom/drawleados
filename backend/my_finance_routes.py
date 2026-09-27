@@ -289,6 +289,12 @@ class DebtPayment(BaseModel):
     note: Optional[str] = ""
 
 
+class DebtPaymentUpdate(BaseModel):
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    note: Optional[str] = None
+
+
 def _validate_debt_fields(debt_type, principal, disbursed, monthly, due_day, frequency=None):
     if debt_type is not None and debt_type not in DEBT_TYPES:
         raise HTTPException(status_code=400, detail=f"debt_type must be one of {sorted(DEBT_TYPES)}")
@@ -365,9 +371,20 @@ def _schedule(debt: dict, today: date) -> dict:
             status = "partial"
         else:
             status = "paid"
+        # Timeliness — compared against the latest payment recorded for this
+        # period (not the period's own due month), so a payment made on time
+        # for October still shows as on time even if entered/edited later.
+        last_payment_date, on_time, days_late = None, None, None
+        payment_dates = [p.get("date") for p in pays if p.get("date")]
+        if payment_dates:
+            last_payment_date = max(payment_dates)
+            diff = (_parse_date(last_payment_date, "date") - due_date).days
+            on_time = diff <= 0
+            days_late = max(diff, 0)
         rows.append({
             "period": period, "due_date": due_date.isoformat(), "amount_due": due,
             "amount_paid": paid, "balance": round(due - paid, 2), "status": status, "payments": pays,
+            "last_payment_date": last_payment_date, "on_time": on_time, "days_late": days_late,
         })
         n += 1
         cursor = step(n)
@@ -588,6 +605,50 @@ async def add_debt_payment(debt_id: str, payload: DebtPayment, request: Request)
         {"debt_id": debt_id},
         {"$push": {"payments": payment}, "$set": {"updated_at": now}},
     )
+    updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
+    return _serialize_debt(updated, date.today())
+
+
+@my_finance_router.put("/debts/{debt_id}/payments/{payment_id}")
+async def update_debt_payment(debt_id: str, payment_id: str, payload: DebtPaymentUpdate, request: Request):
+    """Correct an already-recorded payment's amount/date/note — the period it
+    counts towards never changes, only what's true about that one payment."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    debt = await db.my_finance_debts.find_one({"debt_id": debt_id, "user_id": user.user_id}, {"_id": 0})
+    if not debt:
+        raise HTTPException(status_code=404, detail="Debt not found")
+    payments = debt.get("payments") or []
+    idx = next((i for i, p in enumerate(payments) if p.get("payment_id") == payment_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    payment = dict(payments[idx])
+    if payload.amount is not None:
+        if payload.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be more than 0")
+        payment["amount"] = round(payload.amount, 2)
+    if payload.date is not None:
+        _parse_date(payload.date, "date")
+        payment["date"] = payload.date
+    if payload.note is not None:
+        payment["note"] = payload.note.strip()
+    payments[idx] = payment
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.my_finance_debts.update_one(
+        {"debt_id": debt_id, "user_id": user.user_id},
+        {"$set": {"payments": payments, "updated_at": now}},
+    )
+    if payment.get("expense_id"):
+        expense_update = {"updated_at": now}
+        if payload.amount is not None:
+            expense_update["amount"] = payment["amount"]
+        if payload.date is not None:
+            expense_update["date"] = payment["date"]
+        await db.my_finance_expenses.update_one(
+            {"expense_id": payment["expense_id"], "user_id": user.user_id},
+            {"$set": expense_update},
+        )
     updated = await db.my_finance_debts.find_one({"debt_id": debt_id}, {"_id": 0})
     return _serialize_debt(updated, date.today())
 
