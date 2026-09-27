@@ -1,9 +1,11 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { Loader2 } from 'lucide-react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { Toaster } from './components/ui/sonner';
 import ProtectedRoute from './components/ProtectedRoute';
+import { landingPathFor } from './utils/landingPath';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AuthCallback from './pages/AuthCallback';
@@ -50,6 +52,22 @@ import AutomationPage from './pages/AutomationPage';
 import LinkedInPartnershipPage from './pages/LinkedInPartnershipPage';
 import LinkedInConnectionsPage from './pages/LinkedInConnectionsPage';
 import './App.css';
+
+// "/" and any unmatched route both land here — same landingPathFor() as
+// LoginPage's own post-login navigate(), so a refresh or a stale link never
+// disagrees with where login itself would have sent this user.
+function LandingRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#09090b]">
+        <Loader2 className="h-12 w-12 animate-spin text-[#6366f1]" />
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={landingPathFor(user)} replace />;
+}
 
 function AppRouter() {
   const location = useLocation();
@@ -368,9 +386,9 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/our-tasks" replace />} />
+      <Route path="/" element={<LandingRedirect />} />
       {/* Catch-all: unknown routes redirect to landing instead of rendering a blank shell */}
-      <Route path="*" element={<Navigate to="/our-tasks" replace />} />
+      <Route path="*" element={<LandingRedirect />} />
     </Routes>
   );
 }

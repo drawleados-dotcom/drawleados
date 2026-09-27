@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api, { API_BASE } from '../utils/api';
 import { Loader2 } from 'lucide-react';
+import { landingPathFor } from '../utils/landingPath';
 
 export default function AuthCallback() {
   const location = useLocation();
@@ -32,8 +33,8 @@ export default function AuthCallback() {
         // Store session token
         localStorage.setItem('session_token', response.data.session_token);
 
-        // Navigate to dashboard with user data
-        navigate('/dashboard', { state: { user: response.data.user }, replace: true });
+        // Navigate to this user's landing page, with user data
+        navigate(landingPathFor(response.data.user), { state: { user: response.data.user }, replace: true });
       } catch (error) {
         console.error('Session processing error:', error);
         navigate('/login');
