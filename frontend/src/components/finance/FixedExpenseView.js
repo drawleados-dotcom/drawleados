@@ -22,6 +22,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import PayrollTab from './PayrollTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -266,34 +267,15 @@ const FixedExpenseView = () => {
             </div>
           )}
 
+          {/* Exactly the main Payroll tab's own view (KPI cards + full employee
+              table + payslip modal) — just scoped to a subset of employees and
+              driven by this page's own shared month stepper instead of its own. */}
           {subTab === 'payroll' && (
-            <div className="space-y-3">
-              {card('Payroll (excluding vinoth@drawlead.com)', payrollExclVinoth, '#f59e0b', 'fixed-expense-payroll-card')}
-              <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-[#0c0a09] text-gray-600 dark:text-[#a1a1aa] uppercase text-[11px] tracking-wider">
-                    <tr><th className="text-left px-4 py-3">Employee</th><th className="text-right px-4 py-3">Net Salary</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-[#27272a]">
-                    {otherSlips.length === 0 ? (
-                      <tr><td colSpan={2} className="px-4 py-8 text-center text-gray-500 dark:text-[#71717a]">No payslips for this month</td></tr>
-                    ) : otherSlips.map((p) => (
-                      <tr key={p.payslip_id}>
-                        <td className="px-4 py-3 text-gray-900 dark:text-[#fafafa]">{p.employee_name}</td>
-                        <td className="px-4 py-3 text-right text-gray-900 dark:text-[#fafafa]">{fmt(p.net_salary)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <PayrollTab month={month} year={year} showHeader={false} emailFilter={{ mode: 'exclude', email: VINOTH_EMAIL }} />
           )}
 
           {subTab === 'vinoth_payroll' && (
-            <div className="space-y-3">
-              {card('Vinoth Payroll', vinothPayroll, '#6366f1', 'fixed-expense-vinoth-payroll-card')}
-              {vinothSlips.length === 0 && <p className="text-xs text-gray-500 dark:text-[#71717a]">No payslip found for vinoth@drawlead.com this month.</p>}
-            </div>
+            <PayrollTab month={month} year={year} showHeader={false} emailFilter={{ mode: 'only', email: VINOTH_EMAIL }} />
           )}
 
           {subTab === 'rent' && (

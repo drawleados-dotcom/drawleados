@@ -45,13 +45,18 @@ const STATUS_LABELS = {
   not_created: 'Not Created',
 };
 
-const PayrollTab = () => {
+const PayrollTab = ({ emailFilter, month: controlledMonth, year: controlledYear, showHeader = true }) => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
   const today = new Date();
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [year, setYear] = useState(today.getFullYear());
+  const [monthState, setMonthState] = useState(controlledMonth || today.getMonth() + 1);
+  const [yearState, setYearState] = useState(controlledYear || today.getFullYear());
+  // Controlled mode (e.g. embedded under Fixed Expense, which owns one shared
+  // month stepper for every sub-tab) — falls back to owning its own state
+  // when used standalone, exactly as before.
+  const month = controlledMonth !== undefined ? controlledMonth : monthState;
+  const year = controlledYear !== undefined ? controlledYear : yearState;
 
   const [employees, setEmployees] = useState([]);
   const [payslips, setPayslips] = useState([]);
@@ -81,13 +86,23 @@ const PayrollTab = () => {
     let y = year;
     if (m < 1) { m = 12; y -= 1; }
     if (m > 12) { m = 1; y += 1; }
-    setMonth(m);
-    setYear(y);
+    setMonthState(m);
+    setYearState(y);
   };
 
   const payslipFor = (userId) => payslips.find((p) => p.user_id === userId);
 
-  const rows = employees.map((emp) => ({ emp, p: payslipFor(emp.user_id) }));
+  // emailFilter: { mode: 'only' | 'exclude', email } — e.g. Fixed Expense's
+  // "Vinoth Payroll" (only) vs "Payroll" (exclude) sub-tabs, both showing this
+  // exact same view scoped to a subset of employees.
+  const filteredEmployees = emailFilter
+    ? employees.filter((emp) => {
+        const match = (emp.email || '').toLowerCase() === emailFilter.email.toLowerCase();
+        return emailFilter.mode === 'only' ? match : !match;
+      })
+    : employees;
+
+  const rows = filteredEmployees.map((emp) => ({ emp, p: payslipFor(emp.user_id) }));
   const totalEmployees = rows.length;
   const totalPayable = rows.reduce((s, r) => s + Number(r.p?.net_salary || 0), 0);
   const totalPaid = rows.reduce((s, r) => {
@@ -128,42 +143,44 @@ const PayrollTab = () => {
   return (
     <div className="space-y-4" data-testid="finance-payroll-tab">
       {/* Header + Month Scheduler */}
-      <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Users className="h-5 w-5 text-violet-600 dark:text-[#a78bfa]" />
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Payroll</h3>
-            <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Monthly payroll snapshot — sourced from HR Admin → Payroll Management</p>
+      {showHeader && (
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <Users className="h-5 w-5 text-violet-600 dark:text-[#a78bfa]" />
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Payroll</h3>
+              <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Monthly payroll snapshot — sourced from HR Admin → Payroll Management</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-gray-500 dark:text-[#71717a]" />
+            <span className="text-sm text-gray-900 dark:text-[#fafafa] font-medium">Month:</span>
+            <Button size="sm" variant="ghost" onClick={() => stepMonth(-1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-prev">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <select
+              value={month}
+              onChange={(e) => setMonthState(parseInt(e.target.value))}
+              className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[130px]"
+              data-testid="fin-payroll-month"
+            >
+              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+            <Button size="sm" variant="ghost" onClick={() => stepMonth(1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-next">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <select
+              value={year}
+              onChange={(e) => setYearState(parseInt(e.target.value))}
+              className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[100px]"
+              data-testid="fin-payroll-year"
+            >
+              {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <div className="px-3 py-1.5 rounded-lg bg-[#6366f1]/10 text-[#6366f1] text-sm font-semibold">{periodLabel}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-gray-500 dark:text-[#71717a]" />
-          <span className="text-sm text-gray-900 dark:text-[#fafafa] font-medium">Month:</span>
-          <Button size="sm" variant="ghost" onClick={() => stepMonth(-1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-prev">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <select
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value))}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[130px]"
-            data-testid="fin-payroll-month"
-          >
-            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          <Button size="sm" variant="ghost" onClick={() => stepMonth(1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-next">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[100px]"
-            data-testid="fin-payroll-year"
-          >
-            {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <div className="px-3 py-1.5 rounded-lg bg-[#6366f1]/10 text-[#6366f1] text-sm font-semibold">{periodLabel}</div>
-        </div>
-      </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
