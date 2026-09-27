@@ -6,9 +6,10 @@
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { Users, Calendar as CalendarIcon, FileText, IndianRupee } from 'lucide-react';
+import { Users, Calendar as CalendarIcon, FileText, IndianRupee, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const RANGES = [
   { key: 'today', label: 'Today' },
@@ -16,7 +17,6 @@ const RANGES = [
   { key: 'week', label: 'This Week' },
   { key: 'month', label: 'Month' },
   { key: 'year', label: 'Year' },
-  { key: 'custom', label: 'Custom' },
 ];
 
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
@@ -24,7 +24,7 @@ const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); re
 
 // "This Week" uses the same Tue–Mon convention as Sales > Overview and
 // Finance's Week-Wise view, so this card's number always agrees with theirs.
-const getDateRange = (range, customFrom, customTo) => {
+const getDateRange = (range, customFrom, customTo, pickedMonth, pickedYear) => {
   const now = new Date();
   if (range === 'yesterday') {
     const y = new Date(now);
@@ -38,6 +38,14 @@ const getDateRange = (range, customFrom, customTo) => {
   }
   if (range === 'month') return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(now) };
   if (range === 'year') return { from: startOfDay(new Date(now.getFullYear(), 0, 1)), to: endOfDay(now) };
+  // A specific picked month/year — the full calendar month, not clipped to
+  // today, so a past month still shows its complete totals.
+  if (range === 'month_year') {
+    return {
+      from: startOfDay(new Date(pickedYear, pickedMonth - 1, 1)),
+      to: endOfDay(new Date(pickedYear, pickedMonth, 0)),
+    };
+  }
   if (range === 'custom') {
     const from = customFrom ? startOfDay(new Date(customFrom)) : startOfDay(now);
     const to = customTo ? endOfDay(new Date(customTo)) : endOfDay(now);
@@ -50,16 +58,28 @@ export default function LapsOverviewCard({ isDark }) {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  const today = new Date();
   const [range, setRange] = useState('today');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [pickedMonth, setPickedMonth] = useState(today.getMonth() + 1);
+  const [pickedYear, setPickedYear] = useState(today.getFullYear());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const stepPickedMonth = (delta) => {
+    let m = pickedMonth + delta, y = pickedYear;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setPickedMonth(m);
+    setPickedYear(y);
+    setRange('month_year');
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { from, to } = getDateRange(range, customFrom, customTo);
+      const { from, to } = getDateRange(range, customFrom, customTo, pickedMonth, pickedYear);
       const res = await axios.get(`${API}/api/leads-v2/overview`, {
         headers, params: { date_from: from.toISOString(), date_to: to.toISOString() },
       });
@@ -70,7 +90,7 @@ export default function LapsOverviewCard({ isDark }) {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, customFrom, customTo]);
+  }, [range, customFrom, customTo, pickedMonth, pickedYear]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -95,7 +115,7 @@ export default function LapsOverviewCard({ isDark }) {
         <h3 className={`text-lg font-bold ${textPrimary}`}>LAPS Overview</h3>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-xs uppercase tracking-wide ${textSecondary}`}>Date Filter:</span>
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
             {RANGES.map((opt) => (
               <button
                 key={opt.key}
@@ -109,6 +129,35 @@ export default function LapsOverviewCard({ isDark }) {
                 {opt.label}
               </button>
             ))}
+            {/* A specific month/year, e.g. "< Sep 2026 >" — its own stepper
+                between Year and Custom, distinct from "Month" (this month
+                to date): picking a past month here shows its full total. */}
+            <div
+              className={`flex items-center gap-0.5 rounded-lg text-xs font-medium transition-colors ${
+                range === 'month_year' ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary}`
+              }`}
+              data-testid="dashboard-laps-range-month_year"
+            >
+              <button type="button" onClick={() => stepPickedMonth(-1)} className="p-1.5" data-testid="dashboard-laps-month-prev">
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => setRange('month_year')} className="px-1 py-1.5">
+                {MONTHS[pickedMonth - 1]} {pickedYear}
+              </button>
+              <button type="button" onClick={() => stepPickedMonth(1)} className="p-1.5" data-testid="dashboard-laps-month-next">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRange('custom')}
+              data-testid="dashboard-laps-range-custom"
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                range === 'custom' ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              Custom
+            </button>
           </div>
           {range === 'custom' && (
             <div className="flex items-center gap-1.5">
