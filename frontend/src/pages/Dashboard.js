@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import WeeklyChallengeTracker from '../components/dashboard/WeeklyChallengeTracker';
+import LapsOverviewCard from '../components/dashboard/LapsOverviewCard';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -327,6 +328,10 @@ const Dashboard = () => {
           </h1>
           <p className={mutedClass}>Here's your business overview</p>
         </div>
+
+        {/* LAPS Overview — Leads/Appointment/Proposal Shared/Sales, its own
+            full date filter (Today/Yesterday/This Week/Month/Year/Custom) */}
+        <LapsOverviewCard isDark={isDark} />
 
         {/* 24 Weeks Challenge — Finance / Sales / Marketing weekly tracker */}
         <WeeklyChallengeTracker isDark={isDark} isAdmin={isAdmin} />
