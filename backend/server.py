@@ -34,6 +34,7 @@ from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
 from expense_routes import expense_router, set_expense_db
 from debts_routes import debts_router, init_debts_db
+from my_finance_routes import my_finance_router
 from leads_v2_routes import leads_v2_router, init_leads_v2_db
 from quotation_routes import quotation_router, init_quotation_db
 from documentation_routes import documentation_router, init_documentation_db
@@ -3026,6 +3027,7 @@ api_router.include_router(sop_router)
 api_router.include_router(website_projects_router)
 api_router.include_router(expense_router)
 api_router.include_router(debts_router)
+api_router.include_router(my_finance_router)
 api_router.include_router(leads_v2_router)
 api_router.include_router(quotation_router)
 api_router.include_router(documentation_router)

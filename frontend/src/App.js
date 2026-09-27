@@ -26,6 +26,7 @@ import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import LeaveVerificationPage from './pages/LeaveVerificationPage';
 import MyDocumentsPage from './pages/MyDocumentsPage';
+import MyFinancePage from './pages/MyFinancePage';
 import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import OperationsModalPage from './components/operations/OperationsModalPage';
@@ -204,6 +205,16 @@ function AppRouter() {
           // No module gate — every authenticated employee gets their own profile.
           <ProtectedRoute>
             <HRPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-finance"
+        element={
+          // No module gate — every authenticated employee gets their own
+          // personal finance tracker, same as /hr above.
+          <ProtectedRoute>
+            <MyFinancePage />
           </ProtectedRoute>
         }
       />

@@ -33,6 +33,7 @@ import {
   Bot,
   Linkedin,
   Send,
+  Wallet,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -320,6 +321,17 @@ const Sidebar = () => {
               {!isCollapsed && 'My Profile'}
             </Link>
 
+            {/* My Finance — personal income/expense/debt tracker, every employee's own */}
+            <Link
+              to="/my-finance"
+              data-testid="nav-my-finance"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/my-finance' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'My Finance' : ''}
+            >
+              <Wallet className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'My Finance'}
+            </Link>
+
             {/* Documentation (Personal) */}
             <Link
               to="/my-documents"
@@ -469,6 +481,18 @@ const Sidebar = () => {
         >
           <UserCircle className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'My Profile'}
+        </Link>
+
+        {/* 5b. My Finance — personal income/expense/debt tracker, every employee's own */}
+        <Link
+          to="/my-finance"
+          data-testid="nav-my-finance"
+          style={orderStyle('my_finance')}
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/my-finance' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'My Finance' : ''}
+        >
+          <Wallet className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'My Finance'}
         </Link>
 
         {/* Clients Master View / Service and Packages — Super Admin-only additions */}
