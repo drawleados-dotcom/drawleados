@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import {
-  Calendar, ChevronLeft, ChevronRight, Loader2, Pencil, Save, X, Plus,
+  Calendar, ChevronLeft, ChevronRight, Loader2, Pencil, Plus,
   Wallet, Users, Home, Zap, Building2, Boxes, Megaphone, TrendingUp, ListChecks,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -41,6 +41,35 @@ const SUB_TABS = [
   { key: 'investment', label: 'Investment', icon: TrendingUp },
 ];
 
+const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtDate = (d) => (d ? `${String(d.getDate()).padStart(2, '0')} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '—');
+const parseYmd = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+};
+// Same day-of-month as the rent start date, clamped for short months (e.g. 31st -> 30 Apr).
+const dayInMonth = (y, m0, day) => new Date(y, m0, Math.min(day, new Date(y, m0 + 1, 0).getDate()));
+const EMPTY_RENT = { monthly_rent: 0, maintenance: 0, advance_amount: 0, advance_date: '', start_date: '', billing_type: 'postpaid' };
+
+/**
+ * The rent cycle that starts in the viewed month. Rent runs from the start
+ * date's day-of-month to the day before it next month; prepaid rent is due on
+ * the cycle's first day, postpaid on the day after it ends.
+ * e.g. start 05 Mar, postpaid -> March cycle 05 Mar – 04 Apr, due 05 Apr.
+ */
+const rentCycle = (settings, month, year) => {
+  const start = parseYmd(settings?.start_date);
+  if (!start) return null;
+  if (year < start.getFullYear() || (year === start.getFullYear() && month - 1 < start.getMonth())) return { notStarted: true, start };
+  const day = start.getDate();
+  const from = dayInMonth(year, month - 1, day);
+  const next = dayInMonth(year, month, day);
+  const to = new Date(next.getFullYear(), next.getMonth(), next.getDate() - 1);
+  const due = settings.billing_type === 'prepaid' ? from : next;
+  const firstDue = settings.billing_type === 'prepaid' ? start : dayInMonth(start.getFullYear(), start.getMonth() + 1, day);
+  return { from, to, due, firstDue, start };
+};
+
 const findTop = (tops, name) => (tops || []).find((t) => (t.name || '').trim().toLowerCase() === name.toLowerCase()) || null;
 const findAny = (tops, name) => {
   const stack = [...(tops || [])];
@@ -66,20 +95,23 @@ const FixedExpenseView = () => {
   const [payslips, setPayslips] = useState([]);
   const [toolsSummary, setToolsSummary] = useState({ grand: 0, paid: 0, balance: 0 });
   const [vendorData, setVendorData] = useState({ vendors: [], total: 0, paid: 0, balance: 0 });
+  const [rentSettings, setRentSettings] = useState(EMPTY_RENT);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [budgetsRes, payslipsRes, toolsRes, vendorsRes] = await Promise.all([
+      const [budgetsRes, payslipsRes, toolsRes, vendorsRes, rentRes] = await Promise.all([
         axios.get(`${API}/api/finance/expense-split/budgets?month=${month}&year=${year}`, { headers }),
         axios.get(`${API}/api/payroll/payslips?month=${month}&year=${year}`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/finance/subscriptions/summary?month=${month}&year=${year}`, { headers }).catch(() => ({ data: { grand: 0, paid: 0, balance: 0 } })),
         axios.get(`${API}/api/finance/vendors/payments?month=${month}&year=${year}`, { headers }).catch(() => ({ data: { vendors: [], total: 0, paid: 0, balance: 0 } })),
+        axios.get(`${API}/api/finance/rent/settings`, { headers }).catch(() => ({ data: EMPTY_RENT })),
       ]);
       setCategories(budgetsRes.data?.categories || []);
       setPayslips(payslipsRes.data || []);
       setToolsSummary(toolsRes.data || { grand: 0, paid: 0, balance: 0 });
       setVendorData(vendorsRes.data || { vendors: [], total: 0, paid: 0, balance: 0 });
+      setRentSettings({ ...EMPTY_RENT, ...(rentRes.data || {}) });
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load Fixed Expense');
     } finally {
@@ -118,23 +150,48 @@ const FixedExpenseView = () => {
   ]), [payrollExclVinoth, vinothPayroll, rentNode, ebNode, vendorData, toolsSummary, marketingNode, investmentNode]);
   const grandTotal = useMemo(() => rows.reduce((s, r) => s + r.total, 0), [rows]);
 
-  // ---- Rent fixed-amount inline edit (reuses the existing Budget endpoint) ----
-  const [editingRent, setEditingRent] = useState(false);
-  const [rentValue, setRentValue] = useState('');
+  // ---- Rent: agreement details (rent, maintenance, advance, start date, prepaid/postpaid) ----
+  const rentTotal = Number(rentSettings.monthly_rent || 0) + Number(rentSettings.maintenance || 0);
+  // Fall back to the Budget's Rent amount until rent details have been entered.
+  const rentFixed = rentTotal || rentNode?.budget || 0;
+  const rentSpent = rentNode?.spent || 0;
+  const rentBalance = rentFixed - rentSpent;
+  const cycle = useMemo(() => rentCycle(rentSettings, month, year), [rentSettings, month, year]);
+
+  const [rentModal, setRentModal] = useState(false);
+  const [rentDraft, setRentDraft] = useState(EMPTY_RENT);
   const [savingRent, setSavingRent] = useState(false);
-  const startEditRent = () => { setRentValue(String(rentNode?.budget ?? '')); setEditingRent(true); };
+  const openRentModal = () => {
+    setRentDraft({
+      ...rentSettings,
+      monthly_rent: rentSettings.monthly_rent || (rentTotal ? '' : rentNode?.budget || ''),
+      maintenance: rentSettings.maintenance || '',
+      advance_amount: rentSettings.advance_amount || '',
+    });
+    setRentModal(true);
+  };
+  const setRentField = (k) => (e) => setRentDraft((d) => ({ ...d, [k]: e.target.value }));
+  const draftTotal = Number(rentDraft.monthly_rent || 0) + Number(rentDraft.maintenance || 0);
   const saveRent = async () => {
-    const amount = parseFloat(rentValue);
-    if (isNaN(amount) || amount < 0) { toast.error('Enter a valid amount'); return; }
-    if (!rentNode) { toast.error('No "Rent" category found — add one in Expense Split first'); return; }
+    const nums = ['monthly_rent', 'maintenance', 'advance_amount'].map((k) => Number(rentDraft[k] || 0));
+    if (nums.some((n) => isNaN(n) || n < 0)) { toast.error('Enter valid amounts'); return; }
     setSavingRent(true);
     try {
-      await axios.put(`${API}/api/finance/expense-split/budgets/${rentNode.category_id}`, { amount, month, year }, { headers });
-      toast.success('Rent amount updated');
-      setEditingRent(false);
+      const [monthly_rent, maintenance, advance_amount] = nums;
+      await axios.put(`${API}/api/finance/rent/settings`, {
+        monthly_rent, maintenance, advance_amount,
+        advance_date: rentDraft.advance_date || '', start_date: rentDraft.start_date || '', billing_type: rentDraft.billing_type,
+      }, { headers });
+      // Keep the Budget's Rent amount for this month in sync with Rent + Maintenance.
+      if (rentNode) {
+        await axios.put(`${API}/api/finance/expense-split/budgets/${rentNode.category_id}`, { amount: monthly_rent + maintenance, month, year }, { headers })
+          .catch(() => toast.error('Rent saved, but the Budget amount could not be updated'));
+      }
+      toast.success('Rent details saved');
+      setRentModal(false);
       await load();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to update Rent amount');
+      toast.error(e.response?.data?.detail || 'Failed to save rent details');
     } finally {
       setSavingRent(false);
     }
@@ -281,20 +338,38 @@ const FixedExpenseView = () => {
           {subTab === 'rent' && (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {card('Fixed Amount', rentNode?.budget || 0, '#6366f1', 'fixed-expense-rent-budget')}
-                {card('Actually Spent', rentNode?.spent || 0, '#10b981', 'fixed-expense-rent-spent')}
-                {card('Balance', rentNode?.balance || 0, (rentNode?.balance || 0) < 0 ? '#ef4444' : '#10b981', 'fixed-expense-rent-balance')}
+                {card('Rent', rentSettings.monthly_rent || 0, '#6366f1', 'fixed-expense-rent-rent')}
+                {card('Maintenance', rentSettings.maintenance || 0, '#8b5cf6', 'fixed-expense-rent-maintenance')}
+                {card('Total Rent (Rent + Maintenance)', rentFixed, '#6366f1', 'fixed-expense-rent-budget')}
               </div>
-              <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
-                {!rentNode ? missingCategoryNote('Rent') : editingRent ? (
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min="0" value={rentValue} onChange={(e) => setRentValue(e.target.value)} className="w-40" autoFocus data-testid="fixed-expense-rent-input" />
-                    <Button size="sm" onClick={saveRent} disabled={savingRent} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="fixed-expense-rent-save"><Save className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingRent(false)}><X className="h-3.5 w-3.5" /></Button>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {card('Actually Spent', rentSpent, '#10b981', 'fixed-expense-rent-spent')}
+                {card('Balance', rentBalance, rentBalance < 0 ? '#ef4444' : '#10b981', 'fixed-expense-rent-balance')}
+                {card('Advance Paid', rentSettings.advance_amount || 0, '#f59e0b', 'fixed-expense-rent-advance')}
+              </div>
+              <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 space-y-3" data-testid="fixed-expense-rent-details">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700 dark:text-[#d4d4d8]">
+                    <span><span className="text-gray-500 dark:text-[#71717a]">Rent Start:</span> {fmtDate(parseYmd(rentSettings.start_date))}</span>
+                    <span>
+                      <span className="text-gray-500 dark:text-[#71717a]">Billing:</span>{' '}
+                      <Badge className="bg-[#6366f1]/10 text-[#6366f1] border border-[#6366f1]/30">{rentSettings.billing_type === 'prepaid' ? 'Prepaid' : 'Postpaid'}</Badge>
+                    </span>
+                    <span><span className="text-gray-500 dark:text-[#71717a]">Advance Date:</span> {fmtDate(parseYmd(rentSettings.advance_date))}</span>
                   </div>
+                  <Button size="sm" variant="outline" onClick={openRentModal} data-testid="fixed-expense-rent-edit"><Pencil className="h-3.5 w-3.5 mr-1.5" /> Rent Details</Button>
+                </div>
+                {!cycle ? (
+                  <p className="text-xs text-gray-500 dark:text-[#71717a]">Set the rent start date in "Rent Details" to see each month's rent cycle and due date.</p>
+                ) : cycle.notStarted ? (
+                  <p className="text-xs text-gray-500 dark:text-[#71717a]" data-testid="fixed-expense-rent-cycle">Rent starts on {fmtDate(cycle.start)} — nothing due for {MONTHS[month - 1]} {year}.</p>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={startEditRent} data-testid="fixed-expense-rent-edit"><Pencil className="h-3.5 w-3.5 mr-1.5" /> Fix Rent Amount</Button>
+                  <p className="text-sm text-gray-700 dark:text-[#d4d4d8]" data-testid="fixed-expense-rent-cycle">
+                    Rent period <b>{fmtDate(cycle.from)} – {fmtDate(cycle.to)}</b> · {fmt(rentFixed)} due on <b className="text-[#6366f1]">{fmtDate(cycle.due)}</b>
+                    <span className="text-xs text-gray-500 dark:text-[#71717a]"> (first rent due {fmtDate(cycle.firstDue)})</span>
+                  </p>
                 )}
+                {!rentNode && missingCategoryNote('Rent')}
               </div>
             </div>
           )}
@@ -374,6 +449,72 @@ const FixedExpenseView = () => {
           )}
         </>
       )}
+
+      <Dialog open={rentModal} onOpenChange={(o) => !o && setRentModal(false)}>
+        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-md">
+          <DialogHeader><DialogTitle className="text-gray-900 dark:text-[#fafafa]">Rent Details</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Monthly Rent</Label>
+                <Input type="number" min="0" value={rentDraft.monthly_rent} onChange={setRentField('monthly_rent')} autoFocus data-testid="fixed-expense-rent-input" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Maintenance</Label>
+                <Input type="number" min="0" value={rentDraft.maintenance} onChange={setRentField('maintenance')} data-testid="fixed-expense-rent-maintenance-input" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-[#6366f1]/10 px-3 py-2 text-sm">
+              <span className="text-gray-700 dark:text-[#d4d4d8]">Total Rent</span>
+              <span className="font-bold text-[#6366f1]" data-testid="fixed-expense-rent-draft-total">{fmt(draftTotal)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Advance Amount</Label>
+                <Input type="number" min="0" value={rentDraft.advance_amount} onChange={setRentField('advance_amount')} data-testid="fixed-expense-rent-advance-input" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Advance Date</Label>
+                <Input type="date" value={rentDraft.advance_date || ''} onChange={setRentField('advance_date')} data-testid="fixed-expense-rent-advance-date-input" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Rent Starting Date</Label>
+                <Input type="date" value={rentDraft.start_date || ''} onChange={setRentField('start_date')} data-testid="fixed-expense-rent-start-input" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Billing</Label>
+                <div className="flex gap-1 p-1 rounded-md border border-gray-200 dark:border-[#27272a]">
+                  {[['prepaid', 'Prepaid'], ['postpaid', 'Postpaid']].map(([k, label]) => (
+                    <button
+                      key={k} type="button"
+                      onClick={() => setRentDraft((d) => ({ ...d, billing_type: k }))}
+                      data-testid={`fixed-expense-rent-billing-${k}`}
+                      className={`flex-1 rounded px-2 py-1 text-xs font-medium ${rentDraft.billing_type === k ? 'bg-[#6366f1] text-white' : 'text-gray-600 dark:text-[#a1a1aa]'}`}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {(() => {
+              const c = rentCycle(rentDraft, month, year);
+              return c && !c.notStarted ? (
+                <p className="text-[11px] text-gray-500 dark:text-[#71717a]">
+                  {rentDraft.billing_type === 'prepaid' ? 'Prepaid — rent is paid at the start of each period.' : 'Postpaid — rent is paid after each period ends.'}{' '}
+                  First rent due {fmtDate(c.firstDue)}; {MONTHS[month - 1]} period due {fmtDate(c.due)}.
+                </p>
+              ) : null;
+            })()}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setRentModal(false)}>Cancel</Button>
+              <Button onClick={saveRent} disabled={savingRent} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="fixed-expense-rent-save">
+                {savingRent ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={vendorModal} onOpenChange={(o) => !o && setVendorModal(false)}>
         <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-sm">
