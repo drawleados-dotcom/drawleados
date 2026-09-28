@@ -334,9 +334,6 @@ const Dashboard = () => {
             full date filter (Today/Yesterday/This Week/Month/Year/Custom) */}
         <LapsOverviewCard isDark={isDark} />
 
-        {/* 24 Weeks Challenge — Finance / Sales / Marketing weekly tracker */}
-        <WeeklyChallengeTracker isDark={isDark} isAdmin={isAdmin} />
-
         {/* Row 1: Sales & HR */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Sales Section */}
@@ -561,6 +558,9 @@ const Dashboard = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* 24 Weeks Challenge — Finance / Sales / Marketing weekly tracker, kept last */}
+        <WeeklyChallengeTracker isDark={isDark} isAdmin={isAdmin} />
       </div>
 
       {/* HR card popup — people behind the clicked number */}

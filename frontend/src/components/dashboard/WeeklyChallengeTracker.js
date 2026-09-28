@@ -152,7 +152,16 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
       </div>
     );
   }
-  if (!data) return null;
+  // Never vanish silently when the weekly data fails to load — keep the card
+  // on the Dashboard with a way to retry.
+  if (!data) {
+    return (
+      <div className={`${bgCard} border rounded-2xl p-8 text-center space-y-3`} data-testid="weekly-challenge-tracker">
+        <p className={textSecondary}>Couldn't load the weekly tracker.</p>
+        <Button variant="outline" size="sm" onClick={() => { setLoading(true); load(); }} data-testid="weekly-tracker-retry">Retry</Button>
+      </div>
+    );
+  }
 
   const days = data.days || [];
   const summary = data.week_summary || {};
