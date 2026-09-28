@@ -661,150 +661,80 @@ const BNIOutreachPage = () => {
                     );
                   })}
                 </div>
-              <div className={`hidden md:block ${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm table-fixed">
-                    <thead className={bgSecondary}>
-                      <tr>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[160px]`}>Brand Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[150px]`}>Chapter Name</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[170px]`}>Email</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[150px]`}>Status</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[90px]`}>Profile Link</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[120px]`}>Phone</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[120px]`}>Phone 2</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Website</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[130px]`}>Location</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[140px]`}>Category</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[110px]`}>Group</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[110px]`}>Source</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary} w-[160px]`}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${borderColor}`}>
-                      {visibleOutreach.length === 0 ? (
-                        <tr>
-                          <td colSpan={14} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            {outreach.length === 0 ? 'No outreach entries yet — click "Add New" or "Import CSV" to get started.' : 'No entries match these filters.'}
-                          </td>
-                        </tr>
-                      ) : (
-                        visibleOutreach.map((o) => (
-                          <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors align-top`}>
-                            <td className={`px-4 py-3 font-medium ${textPrimary} line-clamp-2 break-words`}>{o.name}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.brand_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.chapter_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.email || '—'}</td>
-                            <td className="px-4 py-3">
-                              <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
-                                <SelectTrigger className={`w-full ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {OUTREACH_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="px-4 py-3">
-                              {o.profile_link ? (
-                                <Button asChild variant="outline" size="sm" className="text-[#6366f1]">
-                                  <a href={o.profile_link} target="_blank" rel="noopener noreferrer" data-testid={`bni-outreach-profile-${o.outreach_id}`}>
-                                    <LinkIcon className="h-3.5 w-3.5 mr-1" /> View
-                                  </a>
-                                </Button>
-                              ) : <span className={textSecondary}>—</span>}
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.phone || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.phone2 || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.website || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.location || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.category_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary} line-clamp-2 break-words`}>{o.group || '—'}</td>
-                            <td className="px-4 py-3">
-                              {o.source_name ? (
-                                <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40 line-clamp-2 break-words">{o.source_name}</Badge>
-                              ) : <span className={textSecondary}>—</span>}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex flex-wrap gap-1">
-                                <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)} title="View details" data-testid={`bni-outreach-view-${o.outreach_id}`}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => openEdit(o)} title="Edit" data-testid={`bni-outreach-edit-${o.outreach_id}`}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost" size="sm" className="text-[#10b981]"
-                                  onClick={() => reachOut(o)}
-                                  disabled={reachingOutId === o.outreach_id || !o.phone}
-                                  title={!o.phone ? 'No phone number on this entry' : 'Reach Out on WhatsApp'}
-                                  data-testid={`bni-outreach-reachout-${o.outreach_id}`}
-                                >
-                                  <MessageCircle className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)} title="Delete" data-testid={`bni-outreach-delete-${o.outreach_id}`}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Mobile card view */}
-              <div className="md:hidden space-y-3">
+              {/* One row = two lines: the member's name alone on line 1 (plus
+                  its Status dropdown, since that's the field people change
+                  constantly); everything else -- action icons, view/profile
+                  link, phone numbers, email, and the rest of the record's
+                  fields -- condensed onto line 2. Replaces the old 14-column
+                  fixed table, whose narrow columns made long names/brand/
+                  chapter/category text wrap and look misaligned. Same layout
+                  at every screen width instead of a separate mobile card. */}
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden divide-y ${borderColor}`}>
                 {visibleOutreach.length === 0 ? (
-                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6 text-center ${textSecondary}`}>
-                    {outreach.length === 0 ? 'No outreach entries yet — tap "Add New" or "Import CSV".' : 'No entries match these filters.'}
+                  <div className={`px-4 py-8 text-center ${textSecondary}`}>
+                    {outreach.length === 0 ? 'No outreach entries yet — click "Add New" or "Import CSV" to get started.' : 'No entries match these filters.'}
                   </div>
                 ) : (
                   visibleOutreach.map((o) => (
-                    <div key={o.outreach_id} className={`${bgCard} border ${borderColor} rounded-xl p-4 space-y-3`} data-testid={`bni-outreach-card-${o.outreach_id}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className={`font-semibold ${textPrimary} truncate`}>{o.name}</p>
-                          <p className={`text-xs ${textSecondary} truncate`}>{[o.brand_name, o.chapter_name].filter(Boolean).join(' · ') || '—'}</p>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)}><Eye className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </div>
-                      <div className={`text-xs ${textSecondary} space-y-0.5`}>
-                        {o.email && <p className="truncate">{o.email}</p>}
-                        {o.category_name && <p className="truncate">{o.category_name}</p>}
-                        {o.location && <p className="truncate">{o.location}</p>}
-                        {o.source_name && <p className="truncate">Source: {o.source_name}</p>}
-                      </div>
-                      <div className="flex items-center gap-2">
+                    <div key={o.outreach_id} className={`p-4 hover:${bgSecondary} transition-colors`} data-testid={`bni-outreach-row-${o.outreach_id}`}>
+                      {/* Line 1: member name + status */}
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <p className={`font-semibold ${textPrimary}`} data-testid={`bni-outreach-name-${o.outreach_id}`}>{o.name}</p>
                         <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
-                          <SelectTrigger className={`flex-1 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-card-status-${o.outreach_id}`}>
+                          <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             {OUTREACH_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
                           </SelectContent>
                         </Select>
-                        {o.phone ? (
-                          <a href={`tel:${o.phone}`} className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[#10b981] text-white text-sm font-medium" data-testid={`bni-outreach-card-call-${o.outreach_id}`}>
-                            <Phone className="h-4 w-4" /> Call
+                      </div>
+                      {/* Line 2: everything else -- icons, view/profile link,
+                          phone numbers, email, and the rest -- condensed */}
+                      <div className={`flex items-center flex-wrap gap-x-2 gap-y-1.5 mt-2 text-xs ${textSecondary}`}>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#6366f1]" onClick={() => openView(o)} title="View details" data-testid={`bni-outreach-view-${o.outreach_id}`}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(o)} title="Edit" data-testid={`bni-outreach-edit-${o.outreach_id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#10b981]"
+                            onClick={() => reachOut(o)}
+                            disabled={reachingOutId === o.outreach_id || !o.phone}
+                            title={!o.phone ? 'No phone number on this entry' : 'Reach Out on WhatsApp'}
+                            data-testid={`bni-outreach-reachout-${o.outreach_id}`}
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#ef4444]" onClick={() => remove(o.outreach_id)} title="Delete" data-testid={`bni-outreach-delete-${o.outreach_id}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {o.profile_link && (
+                          <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#6366f1] hover:underline shrink-0" data-testid={`bni-outreach-profile-${o.outreach_id}`}>
+                            <LinkIcon className="h-3.5 w-3.5" /> View
                           </a>
-                        ) : (
-                          <span className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[#71717a]/15 text-[#71717a] text-sm">
-                            <Phone className="h-4 w-4" /> —
-                          </span>
+                        )}
+                        {o.brand_name && <span>{o.brand_name}</span>}
+                        {o.chapter_name && <span>· {o.chapter_name}</span>}
+                        {o.email && <span className="truncate max-w-[220px]">· {o.email}</span>}
+                        {o.phone && (
+                          <a href={`tel:${o.phone}`} className="inline-flex items-center gap-1 text-[#10b981] hover:underline">
+                            <Phone className="h-3 w-3" /> {o.phone}
+                          </a>
                         )}
                         {o.phone2 && (
-                          <a href={`tel:${o.phone2}`} className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md border border-[#10b981] text-[#10b981] text-sm font-medium" data-testid={`bni-outreach-card-call2-${o.outreach_id}`}>
-                            <Phone className="h-4 w-4" /> Call 2
+                          <a href={`tel:${o.phone2}`} className="inline-flex items-center gap-1 text-[#10b981] hover:underline">
+                            <Phone className="h-3 w-3" /> {o.phone2}
                           </a>
                         )}
+                        {o.website && <a href={o.website} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[200px]">· {o.website}</a>}
+                        {o.location && <span>· {o.location}</span>}
+                        {o.category_name && <Badge className="bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40">{o.category_name}</Badge>}
+                        {o.group && <span>· {o.group}</span>}
+                        {o.source_name && <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40">{o.source_name}</Badge>}
                       </div>
                     </div>
                   ))
