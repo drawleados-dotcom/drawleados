@@ -11,6 +11,7 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Calendar } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { format } from 'date-fns';
 import axios from 'axios';
 import useAutoRefresh from '../hooks/useAutoRefresh';
@@ -25,17 +26,44 @@ import {
   Home,
   Globe,
   Calendar as CalendarIcon,
-  ChevronRight,
   Package,
   Search,
   Share2,
   Megaphone,
+  Code,
+  BarChart3,
+  Clock,
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+const ymd = (d) => (d ? format(d, 'yyyy-MM-dd') : undefined);
+const fmtTime = (iso) => (iso ? format(new Date(iso), 'hh:mm a') : '—');
+const fmtHours = (secs) => {
+  const s = Math.max(0, Math.round(secs || 0));
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+};
+
+// Icon + accent per department key (matches the departments used on tasks).
+const DEPT_STYLE = {
+  website: { icon: Globe, color: '#3b82f6' },
+  social_media: { icon: Share2, color: '#ec4899' },
+  meta: { icon: Megaphone, color: '#6366f1' },
+  seo: { icon: Search, color: '#22c55e' },
+  erp: { icon: Code, color: '#0ea5e9' },
+  finance: { icon: DollarSign, color: '#8b5cf6' },
+  hr: { icon: Users, color: '#10b981' },
+  business_dev: { icon: BarChart3, color: '#f59e0b' },
+};
+
+const HR_LISTS = {
+  present: { label: 'People Present', icon: UserCheck, color: '#22c55e' },
+  absent: { label: 'Absent', icon: UserX, color: '#ef4444' },
+  wfh: { label: 'Work From Home', icon: Home, color: '#8b5cf6' },
+};
 
 // Date Range Picker Component
 const DateRangePicker = ({ dateRange, onDateChange, isDark }) => {
@@ -139,14 +167,15 @@ const Dashboard = () => {
   const today = new Date();
   const [salesDateRange, setSalesDateRange] = useState({ from: today, to: today });
   const [hrDateRange, setHrDateRange] = useState({ from: today, to: today });
-  const [websiteDateRange, setWebsiteDateRange] = useState({ from: today, to: today });
+  const [opsDateRange, setOpsDateRange] = useState({ from: today, to: today });
   const [financeDateRange, setFinanceDateRange] = useState({ from: today, to: today });
   
   // Data states
   const [salesData, setSalesData] = useState({ leads: 0, proposals: 0, deals: 0 });
-  const [hrData, setHrData] = useState({ present: 0, absent: 0, wfh: 0, total: 0 });
-  const [websiteData, setWebsiteData] = useState({ ongoing: 0, delivery: 0, newProjects: 0 });
-  const [operationsData, setOperationsData] = useState({ seo: [], smm: [], meta: [] });
+  const [hrData, setHrData] = useState({ present: [], absent: [], wfh: [], total: 0 });
+  const [hrPopup, setHrPopup] = useState(null); // 'present' | 'absent' | 'wfh'
+  const [opsDepartments, setOpsDepartments] = useState([]);
+  const [hoursPopup, setHoursPopup] = useState(null); // { dept, project }
   const [financeData, setFinanceData] = useState({ cashIn: 0, cashOut: 0, monthRevenue: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -182,70 +211,37 @@ const Dashboard = () => {
     }
   }, [salesDateRange, token]);
 
-  // Fetch HR Data
+  // Fetch HR Data — who was present/absent/WFH in the range, with login times
   const fetchHRData = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/admin/dashboard-stats`, { headers });
+      const res = await axios.get(`${API}/api/hr/admin/dashboard-attendance`, {
+        headers,
+        params: { from_date: ymd(hrDateRange.from), to_date: ymd(hrDateRange.to || hrDateRange.from) },
+      });
       setHrData({
-        present: res.data.present_today || 0,
-        absent: res.data.absent_today || 0,
-        wfh: res.data.wfh_today || 0,
-        total: res.data.total_employees || 0
+        present: res.data.present || [],
+        absent: res.data.absent || [],
+        wfh: res.data.wfh || [],
+        total: res.data.total_employees || 0,
       });
     } catch (error) {
       console.error('Error fetching HR:', error);
     }
-  }, [token]);
+  }, [hrDateRange, token]);
 
-  // Fetch Website Projects Data
-  const fetchWebsiteData = useCallback(async () => {
-    try {
-      const projects = await axios.get(`${API}/api/website-projects/projects`, { headers });
-      const projectList = projects.data || [];
-      
-      const filteredProjects = projectList.filter(p => isInDateRange(p.created_at, websiteDateRange));
-      const ongoing = filteredProjects.filter(p => p.status === 'active').length;
-      const delivery = filteredProjects.filter(p => p.progress >= 90).length;
-      const newProjects = filteredProjects.length;
-      
-      setWebsiteData({
-        ongoing,
-        delivery,
-        newProjects
-      });
-    } catch (error) {
-      console.error('Error fetching website:', error);
-    }
-  }, [websiteDateRange, token]);
-
-  // Fetch Operations Data (SEO, SMM, Meta clients)
+  // Fetch Operations Data — every department's projects: To Do / Pending /
+  // Completed task counts and hours tracked in the range
   const fetchOperationsData = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads`, { headers });
-      const leads = res.data || [];
-      
-      const seoClients = leads.filter(l => 
-        l.service_name?.toLowerCase().includes('seo') && 
-        (l.status_name === 'Closed Won' || l.status_name === 'Active')
-      );
-      const smmClients = leads.filter(l => 
-        (l.service_name?.toLowerCase().includes('smm') || l.service_name?.toLowerCase().includes('social')) && 
-        (l.status_name === 'Closed Won' || l.status_name === 'Active')
-      );
-      const metaClients = leads.filter(l => 
-        (l.service_name?.toLowerCase().includes('meta') || l.service_name?.toLowerCase().includes('ads')) && 
-        (l.status_name === 'Closed Won' || l.status_name === 'Active')
-      );
-      
-      setOperationsData({
-        seo: seoClients,
-        smm: smmClients,
-        meta: metaClients
+      const res = await axios.get(`${API}/api/our-tasks/department-summary`, {
+        headers,
+        params: { from_date: ymd(opsDateRange.from), to_date: ymd(opsDateRange.to || opsDateRange.from) },
       });
+      setOpsDepartments(res.data.departments || []);
     } catch (error) {
       console.error('Error fetching operations:', error);
     }
-  }, [token]);
+  }, [opsDateRange, token]);
 
   // Fetch Finance Data
   const fetchFinanceData = useCallback(async () => {
@@ -274,7 +270,6 @@ const Dashboard = () => {
       await Promise.all([
         fetchSalesData(),
         fetchHRData(),
-        fetchWebsiteData(),
         fetchOperationsData(),
         fetchFinanceData()
       ]);
@@ -285,11 +280,11 @@ const Dashboard = () => {
 
   useEffect(() => { fetchSalesData(); }, [salesDateRange]);
   useEffect(() => { fetchHRData(); }, [hrDateRange]);
-  useEffect(() => { fetchWebsiteData(); }, [websiteDateRange]);
+  useEffect(() => { fetchOperationsData(); }, [opsDateRange]);
   useEffect(() => { fetchFinanceData(); }, [financeDateRange]);
 
   // Background polling + focus refresh — keeps dashboard cards live
-  useAutoRefresh([fetchSalesData, fetchHRData, fetchWebsiteData, fetchOperationsData, fetchFinanceData]);
+  useAutoRefresh([fetchSalesData, fetchHRData, fetchOperationsData, fetchFinanceData]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -395,123 +390,108 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
-                <div className={`p-4 rounded-xl text-center ${sectionClass}`}>
-                  <UserCheck className="h-6 w-6 mx-auto mb-2 text-[#22c55e]" />
-                  <p className={`text-2xl font-bold ${textClass}`}>{hrData.present}</p>
-                  <p className={`text-xs ${mutedClass}`}>People Present</p>
-                </div>
-                <div className={`p-4 rounded-xl text-center ${sectionClass}`}>
-                  <UserX className="h-6 w-6 mx-auto mb-2 text-[#ef4444]" />
-                  <p className={`text-2xl font-bold ${textClass}`}>{hrData.absent}</p>
-                  <p className={`text-xs ${mutedClass}`}>Absent</p>
-                </div>
-                <div className={`p-4 rounded-xl text-center ${sectionClass}`}>
-                  <Home className="h-6 w-6 mx-auto mb-2 text-[#8b5cf6]" />
-                  <p className={`text-2xl font-bold ${textClass}`}>{hrData.wfh}</p>
-                  <p className={`text-xs ${mutedClass}`}>Work From Home</p>
-                </div>
+                {Object.entries(HR_LISTS).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setHrPopup(key)}
+                    className={`p-4 rounded-xl text-center border border-transparent transition-colors hover:border-[#6366f1]/40 ${sectionClass}`}
+                    data-testid={`dashboard-hr-${key}`}
+                  >
+                    <cfg.icon className="h-6 w-6 mx-auto mb-2" style={{ color: cfg.color }} />
+                    <p className={`text-2xl font-bold ${textClass}`}>{hrData[key].length}</p>
+                    <p className={`text-xs ${mutedClass}`}>{cfg.label}</p>
+                  </button>
+                ))}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Row 2: Operations */}
+        {/* Row 2: Operations — one card per department, side by side */}
         <Card className={cardClass}>
           <CardHeader className="pb-3">
-            <CardTitle className={`flex items-center gap-2 ${textClass}`}>
-              <div className="p-2 rounded-lg bg-[#f59e0b]/20">
-                <Package className="h-5 w-5 text-[#f59e0b]" />
-              </div>
-              Operations
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className={`flex items-center gap-2 ${textClass}`}>
+                <div className="p-2 rounded-lg bg-[#f59e0b]/20">
+                  <Package className="h-5 w-5 text-[#f59e0b]" />
+                </div>
+                Operations
+              </CardTitle>
+              <DateRangePicker
+                dateRange={opsDateRange}
+                onDateChange={setOpsDateRange}
+                isDark={isDark}
+              />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* Website */}
-              <div className={`p-4 rounded-xl border ${sectionClass}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-5 w-5 text-[#3b82f6]" />
-                    <span className={`font-semibold ${textClass}`}>Website</span>
+            <div className="flex gap-4 overflow-x-auto pb-2" data-testid="dashboard-ops-departments">
+              {opsDepartments.map((dept) => {
+                const style = DEPT_STYLE[dept.key] || { icon: Briefcase, color: '#6366f1' };
+                const DeptIcon = style.icon;
+                return (
+                  <div key={dept.key} className={`w-[340px] shrink-0 p-4 rounded-xl border ${sectionClass}`} data-testid={`dashboard-ops-dept-${dept.key}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <DeptIcon className="h-5 w-5" style={{ color: style.color }} />
+                        <span className={`font-semibold ${textClass}`}>{dept.label}</span>
+                      </div>
+                      <span className={`text-xs ${mutedClass}`}>{dept.projects.length} project{dept.projects.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 mb-3 text-center">
+                      {[
+                        ['To Do', dept.to_do, '#3b82f6'],
+                        ['Pending', dept.pending, '#f59e0b'],
+                        ['Completed', dept.completed, '#22c55e'],
+                        ['Worked', fmtHours(dept.worked_seconds), '#8b5cf6'],
+                      ].map(([label, value, color]) => (
+                        <div key={label}>
+                          <p className="text-sm font-bold" style={{ color }}>{value}</p>
+                          <p className={`text-[10px] uppercase tracking-wide ${mutedClass}`}>{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {dept.projects.length === 0 ? (
+                      <p className={`text-xs text-center py-4 ${mutedClass}`}>No projects yet</p>
+                    ) : (
+                      <div className="max-h-64 overflow-y-auto -mx-1">
+                        <table className="w-full text-xs">
+                          <thead className={`${mutedClass} sticky top-0 ${isDark ? 'bg-[#0f0f11]' : 'bg-gray-50'}`}>
+                            <tr>
+                              <th className="text-left font-medium px-1 py-1">Project</th>
+                              <th className="text-center font-medium px-1 py-1" title="All tasks">To Do</th>
+                              <th className="text-center font-medium px-1 py-1" title="Not completed">Pend.</th>
+                              <th className="text-center font-medium px-1 py-1">Done</th>
+                              <th className="text-right font-medium px-1 py-1">Hours</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dept.projects.map((p) => (
+                              <tr key={p.project_id || 'none'} className={`border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+                                <td className={`px-1 py-1.5 max-w-[120px] truncate ${textClass}`} title={p.project_name}>{p.project_name}</td>
+                                <td className="px-1 py-1.5 text-center text-[#3b82f6]">{p.to_do}</td>
+                                <td className="px-1 py-1.5 text-center text-[#f59e0b]">{p.pending}</td>
+                                <td className="px-1 py-1.5 text-center text-[#22c55e]">{p.completed}</td>
+                                <td className="px-1 py-1.5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setHoursPopup({ dept, project: p })}
+                                    className="text-[#6366f1] hover:underline font-medium whitespace-nowrap"
+                                    data-testid={`dashboard-ops-hours-${dept.key}-${p.project_id || 'none'}`}
+                                  >
+                                    {fmtHours(p.worked_seconds)}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                  <DateRangePicker 
-                    dateRange={websiteDateRange} 
-                    onDateChange={setWebsiteDateRange}
-                    isDark={isDark}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className={`text-sm ${mutedClass}`}>Ongoing Projects</span>
-                    <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">{websiteData.ongoing}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className={`text-sm ${mutedClass}`}>Delivery</span>
-                    <Badge className="bg-[#22c55e]/20 text-[#22c55e]">{websiteData.delivery}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className={`text-sm ${mutedClass}`}>New Project</span>
-                    <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{websiteData.newProjects}</Badge>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEO */}
-              <div className={`p-4 rounded-xl border ${sectionClass}`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Search className="h-5 w-5 text-[#22c55e]" />
-                  <span className={`font-semibold ${textClass}`}>SEO</span>
-                </div>
-                <div className="text-center py-2">
-                  <p className={`text-3xl font-bold ${textClass}`}>{operationsData.seo.length}</p>
-                  <p className={`text-sm ${mutedClass}`}>Clients</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  className={`w-full mt-2 text-[#6366f1] hover:bg-[#6366f1]/10`}
-                  onClick={() => window.location.href = '/sop-works?service=seo'}
-                >
-                  Know More <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-
-              {/* SMM */}
-              <div className={`p-4 rounded-xl border ${sectionClass}`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Share2 className="h-5 w-5 text-[#ec4899]" />
-                  <span className={`font-semibold ${textClass}`}>SMM</span>
-                </div>
-                <div className="text-center py-2">
-                  <p className={`text-3xl font-bold ${textClass}`}>{operationsData.smm.length}</p>
-                  <p className={`text-sm ${mutedClass}`}>Clients</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  className={`w-full mt-2 text-[#6366f1] hover:bg-[#6366f1]/10`}
-                  onClick={() => window.location.href = '/social-media'}
-                >
-                  Know More <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-
-              {/* Meta */}
-              <div className={`p-4 rounded-xl border ${sectionClass}`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Megaphone className="h-5 w-5 text-[#3b82f6]" />
-                  <span className={`font-semibold ${textClass}`}>Meta</span>
-                </div>
-                <div className="text-center py-2">
-                  <p className={`text-3xl font-bold ${textClass}`}>{operationsData.meta.length}</p>
-                  <p className={`text-sm ${mutedClass}`}>Clients</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  className={`w-full mt-2 text-[#6366f1] hover:bg-[#6366f1]/10`}
-                  onClick={() => window.location.href = '/sop-works?service=meta_ads'}
-                >
-                  Know More <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -577,6 +557,100 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* HR card popup — people behind the clicked number */}
+      <Dialog open={!!hrPopup} onOpenChange={(o) => !o && setHrPopup(null)}>
+        <DialogContent className={`max-w-2xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={textClass}>
+              {hrPopup && HR_LISTS[hrPopup].label} ({hrPopup ? hrData[hrPopup].length : 0})
+            </DialogTitle>
+          </DialogHeader>
+          {hrPopup && (() => {
+            const rows = hrData[hrPopup];
+            const multiDay = new Set(rows.map((r) => r.date)).size > 1;
+            const showTimes = hrPopup !== 'absent';
+            return rows.length === 0 ? (
+              <p className={`text-sm py-6 text-center ${mutedClass}`}>No one in this list for the selected dates.</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto">
+                <table className="w-full text-sm" data-testid="dashboard-hr-popup-table">
+                  <thead className={`${mutedClass} text-xs uppercase tracking-wide`}>
+                    <tr>
+                      <th className="text-left px-2 py-2">Name</th>
+                      <th className="text-left px-2 py-2">Department</th>
+                      {multiDay && <th className="text-left px-2 py-2">Date</th>}
+                      {showTimes && <th className="text-left px-2 py-2">Login</th>}
+                      {showTimes && <th className="text-left px-2 py-2">Logout</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={`${r.user_id}-${r.date}`} className={`border-t ${isDark ? 'border-[#27272a]' : 'border-gray-100'}`}>
+                        <td className={`px-2 py-2 font-medium ${textClass}`}>
+                          {r.name}
+                          {r.designation && <span className={`block text-xs font-normal ${mutedClass}`}>{r.designation}</span>}
+                        </td>
+                        <td className={`px-2 py-2 capitalize ${mutedClass}`}>{(r.department || '—').replace(/_/g, ' ')}</td>
+                        {multiDay && <td className={`px-2 py-2 ${mutedClass}`}>{format(new Date(`${r.date}T00:00:00`), 'dd MMM')}</td>}
+                        {showTimes && (
+                          <td className={`px-2 py-2 ${textClass}`}>
+                            <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-[#22c55e]" />{fmtTime(r.login_time)}</span>
+                          </td>
+                        )}
+                        {showTimes && (
+                          <td className={`px-2 py-2 ${mutedClass}`}>
+                            {r.is_clocked_in ? <Badge className="bg-[#22c55e]/15 text-[#22c55e]">Working</Badge> : fmtTime(r.logout_time)}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Operations worked-hours popup — who worked on the project, and how long */}
+      <Dialog open={!!hoursPopup} onOpenChange={(o) => !o && setHoursPopup(null)}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={textClass}>
+              {hoursPopup?.project.project_name}
+              <span className={`block text-xs font-normal mt-1 ${mutedClass}`}>
+                {hoursPopup?.dept.label} · Worked hours
+                {opsDateRange.from && ` · ${format(opsDateRange.from, 'dd MMM')}${opsDateRange.to && ymd(opsDateRange.to) !== ymd(opsDateRange.from) ? ` – ${format(opsDateRange.to, 'dd MMM yyyy')}` : ` ${format(opsDateRange.from, 'yyyy')}`}`}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          {hoursPopup && (hoursPopup.project.people.length === 0 ? (
+            <p className={`text-sm py-6 text-center ${mutedClass}`}>No time tracked on this project for the selected dates.</p>
+          ) : (
+            <table className="w-full text-sm" data-testid="dashboard-ops-hours-popup">
+              <thead className={`${mutedClass} text-xs uppercase tracking-wide`}>
+                <tr>
+                  <th className="text-left px-2 py-2">Person</th>
+                  <th className="text-right px-2 py-2">Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hoursPopup.project.people.map((person) => (
+                  <tr key={person.user_id} className={`border-t ${isDark ? 'border-[#27272a]' : 'border-gray-100'}`}>
+                    <td className={`px-2 py-2 ${textClass}`}>{person.name}</td>
+                    <td className={`px-2 py-2 text-right ${textClass}`}>{fmtHours(person.seconds)}</td>
+                  </tr>
+                ))}
+                <tr className={`border-t-2 font-bold ${isDark ? 'border-[#3f3f46]' : 'border-gray-200'}`}>
+                  <td className={`px-2 py-2 ${textClass}`}>Total</td>
+                  <td className="px-2 py-2 text-right text-[#6366f1]">{fmtHours(hoursPopup.project.worked_seconds)}</td>
+                </tr>
+              </tbody>
+            </table>
+          ))}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

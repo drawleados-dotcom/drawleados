@@ -616,6 +616,104 @@ async def get_operations_summary(date: str, request: Request):
     }
 
 
+# Dashboard > Operations: every department's projects with task counts and
+# the hours tracked on them, plus who worked those hours.
+OPS_DEPARTMENTS = [
+    ("website", "Website"), ("social_media", "Social Media"), ("meta", "Meta Ads"), ("seo", "SEO"),
+    ("erp", "ERP"), ("finance", "Finance"), ("hr", "HR"), ("business_dev", "Business Dev"),
+]
+
+
+@our_tasks_router.get("/department-summary")
+async def get_department_summary(request: Request, from_date: Optional[str] = None, to_date: Optional[str] = None):
+    """Per department, per project: to_do (all tasks), pending (not completed),
+    completed, and worked seconds tracked within [from_date, to_date]
+    (YYYY-MM-DD, default today) split by the person who tracked them."""
+    from server import get_current_user, db
+    await get_current_user(request)
+
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) if from_date else today
+        end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) if to_date else start
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    if end < start:
+        start, end = end, start
+    range_end = end + timedelta(days=1)
+    now = datetime.now(timezone.utc)
+
+    def parse(v):
+        try:
+            d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            return None
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+    labels = dict(OPS_DEPARTMENTS)
+    depts: Dict[str, Dict[str, Any]] = {k: {"key": k, "label": l, "projects": {}} for k, l in OPS_DEPARTMENTS}
+    user_ids = set()
+
+    cursor = db.our_tasks.find(
+        {"department": {"$nin": [None, "", "personal"]}},
+        {"_id": 0, "department": 1, "project_id": 1, "project_name": 1, "status": 1,
+         "assigned_to": 1, "time_tracking.sessions": 1},
+    )
+    async for t in cursor:
+        dkey = str(t["department"]).strip().lower()
+        dept = depts.setdefault(dkey, {"key": dkey, "label": labels.get(dkey, dkey.replace("_", " ").title()), "projects": {}})
+        pid = t.get("project_id") or "none"
+        proj = dept["projects"].setdefault(pid, {
+            "project_id": None if pid == "none" else pid,
+            "project_name": t.get("project_name") or ("General (no project)" if pid == "none" else "Untitled project"),
+            "to_do": 0, "pending": 0, "completed": 0, "worked_seconds": 0, "people": {},
+        })
+        if proj["project_name"] == "Untitled project" and t.get("project_name"):
+            proj["project_name"] = t["project_name"]
+        proj["to_do"] += 1
+        if t.get("status") == "completed":
+            proj["completed"] += 1
+        else:
+            proj["pending"] += 1
+
+        for s in ((t.get("time_tracking") or {}).get("sessions") or []):
+            st = parse(s.get("start")) if s.get("start") else None
+            if not st:
+                continue
+            en = parse(s.get("end")) if s.get("end") else now
+            if not en:
+                continue
+            secs = int((min(en, range_end) - max(st, start)).total_seconds())
+            if secs <= 0:
+                continue
+            uid = s.get("user_id") or t.get("assigned_to") or "unknown"
+            user_ids.add(uid)
+            proj["worked_seconds"] += secs
+            proj["people"][uid] = proj["people"].get(uid, 0) + secs
+
+    names = {}
+    if user_ids:
+        async for u in db.users.find({"user_id": {"$in": list(user_ids)}}, {"_id": 0, "user_id": 1, "name": 1}):
+            names[u["user_id"]] = u.get("name") or "Unknown"
+
+    out = []
+    for dept in depts.values():
+        projects = []
+        for p in dept["projects"].values():
+            p["people"] = sorted(
+                [{"user_id": uid, "name": names.get(uid, "Unknown"), "seconds": secs} for uid, secs in p["people"].items()],
+                key=lambda x: -x["seconds"],
+            )
+            projects.append(p)
+        # Projects with open work first, then the most-worked.
+        projects.sort(key=lambda p: (p["project_id"] is None, -p["pending"], -p["worked_seconds"], p["project_name"].lower()))
+        out.append({
+            "key": dept["key"], "label": dept["label"], "projects": projects,
+            "to_do": sum(p["to_do"] for p in projects), "pending": sum(p["pending"] for p in projects),
+            "completed": sum(p["completed"] for p in projects), "worked_seconds": sum(p["worked_seconds"] for p in projects),
+        })
+    return {"from_date": start.strftime("%Y-%m-%d"), "to_date": end.strftime("%Y-%m-%d"), "departments": out}
+
 
 # Get a single task
 @our_tasks_router.get("/tasks/{task_id}")

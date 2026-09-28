@@ -4379,6 +4379,83 @@ async def get_hr_dashboard_stats(request: Request):
         "pending_leaves": pending_leaves
     }
 
+
+@hr_router.get("/admin/dashboard-attendance")
+async def get_hr_dashboard_attendance(request: Request, from_date: Optional[str] = None, to_date: Optional[str] = None):
+    """People behind the Dashboard HR card for a date range (YYYY-MM-DD, default
+    today): who was present (with first login / last logout), who worked from
+    home, and who was absent — one row per person per day."""
+    from server import get_current_user
+    await get_current_user(request)
+
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) if from_date else today
+        end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) if to_date else start
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    if end < start:
+        start, end = end, start
+    end = min(end, today)  # no attendance (or absence) for future days
+
+    def iso(v):
+        if isinstance(v, datetime):
+            return (v if v.tzinfo else v.replace(tzinfo=timezone.utc)).isoformat()
+        return v
+
+    users = await db.users.find(
+        {"is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "department": 1, "designation": 1},
+    ).to_list(2000)
+    users_map = {u["user_id"]: u for u in users}
+
+    records = await db.attendance.find(
+        {"date": {"$gte": start, "$lt": end + timedelta(days=1)}, "clock_in": {"$ne": None}},
+        {"_id": 0},
+    ).to_list(10000) if end >= start else []
+
+    present, wfh, seen = [], [], set()
+    for r in records:
+        day = r["date"].strftime("%Y-%m-%d") if isinstance(r.get("date"), datetime) else str(r.get("date"))[:10]
+        seen.add((r["user_id"], day))
+        sessions = r.get("sessions") or []
+        u = users_map.get(r["user_id"], {})
+        row = {
+            "user_id": r["user_id"],
+            "name": u.get("name") or r.get("user_name") or "Unknown",
+            "department": u.get("department") or "",
+            "designation": u.get("designation") or "",
+            "date": day,
+            # clock_in is overwritten on each new session, so the day's first
+            # login lives on the first saved session when there is one.
+            "login_time": iso(sessions[0].get("clock_in") if sessions else r.get("clock_in")),
+            "logout_time": iso(r.get("clock_out")),
+            "is_clocked_in": not r.get("clock_out"),
+            "total_hours": round(float(r.get("total_hours") or 0), 2),
+            "work_location": r.get("work_location") or r.get("work_mode") or "office",
+        }
+        present.append(row)
+        if r.get("work_location") == "home" or r.get("work_mode") == "wfh":
+            wfh.append(row)
+
+    absent = []
+    day = start
+    while day <= end:
+        key = day.strftime("%Y-%m-%d")
+        for u in users:
+            if (u["user_id"], key) not in seen:
+                absent.append({
+                    "user_id": u["user_id"], "name": u.get("name") or "Unknown",
+                    "department": u.get("department") or "", "designation": u.get("designation") or "",
+                    "date": key,
+                })
+        day += timedelta(days=1)
+
+    present.sort(key=lambda x: (x["date"], x["login_time"] or ""))
+    wfh.sort(key=lambda x: (x["date"], x["login_time"] or ""))
+    absent.sort(key=lambda x: (x["date"], x["name"].lower()))
+    return {"present": present, "absent": absent, "wfh": wfh, "total_employees": len(users)}
+
 # ============== CREATE EMPLOYEE ==============
 
 class CreateEmployeeRequest(BaseModel):
