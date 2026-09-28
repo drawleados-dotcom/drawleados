@@ -215,16 +215,29 @@ export default function MyFinancePage() {
   // from the already-loaded debts list rather than a separate fetch.
   const debtTypeSummary = useMemo(() => {
     const totals = { emi: { count: 0, outstanding: 0 }, loan: { count: 0, outstanding: 0 }, chit: { count: 0, outstanding: 0 }, normal: { count: 0, outstanding: 0 } };
-    let totalOutstanding = 0, totalPaid = 0;
+    let totalDebt = 0, totalOutstanding = 0, totalPaid = 0;
     debts.forEach((d) => {
       const t = totals[d.debt_type] || totals.loan;
       t.count += 1;
       t.outstanding += d.summary?.outstanding || 0;
+      totalDebt += d.summary?.total_due || 0;
       totalOutstanding += d.summary?.outstanding || 0;
       totalPaid += d.summary?.total_paid || 0;
     });
-    return { totals, totalOutstanding, totalPaid };
+    return { totals, totalDebt, totalOutstanding, totalPaid };
   }, [debts]);
+
+  // "Total Debt" (everything) / "Outstanding" (still owed) / "Total Paid"
+  // (fully settled, or manually closed) — filters both the debt list below
+  // and, via debtTypeSummary being recomputed off the filtered set isn't
+  // needed since the cards always show the grand totals; only the list
+  // narrows to whichever bucket is selected.
+  const [debtFilter, setDebtFilter] = useState('all'); // 'all' | 'outstanding' | 'paid'
+  const filteredDebts = useMemo(() => {
+    if (debtFilter === 'outstanding') return debts.filter((d) => d.status !== 'closed' && (d.summary?.outstanding || 0) > 0.01);
+    if (debtFilter === 'paid') return debts.filter((d) => d.status === 'closed' || (d.summary?.outstanding || 0) <= 0.01);
+    return debts;
+  }, [debts, debtFilter]);
 
   const openAddDebt = () => { setEditingDebtId(null); setDebtForm(emptyDebtForm()); setDebtWizardStep('choose'); setShowDebtModal(true); };
   const chooseDebtType = (type) => { setDebtForm(emptyDebtForm(type)); setDebtWizardStep('form'); };
@@ -639,15 +652,21 @@ export default function MyFinancePage() {
             {activeTab === 'debts' && (
               <div className="space-y-3">
                 {debts.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <div className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid="my-finance-debt-summary-total">
-                      <p className={`text-xs ${textSecondary}`}>Total Debt Outstanding</p>
-                      <p className="text-xl font-bold text-[#f59e0b]">{money(debtTypeSummary.totalOutstanding)}</p>
-                    </div>
-                    <div className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid="my-finance-debt-summary-paid">
-                      <p className={`text-xs ${textSecondary}`}>Total Paid</p>
-                      <p className="text-xl font-bold text-[#10b981]">{money(debtTypeSummary.totalPaid)}</p>
-                    </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+                    {[
+                      { key: 'all', label: 'Total Debt', value: debtTypeSummary.totalDebt, cls: 'text-[#6366f1]' },
+                      { key: 'outstanding', label: 'Outstanding', value: debtTypeSummary.totalOutstanding, cls: 'text-[#f59e0b]' },
+                      { key: 'paid', label: 'Total Paid', value: debtTypeSummary.totalPaid, cls: 'text-[#10b981]' },
+                    ].map((c) => (
+                      <button
+                        key={c.key} type="button" onClick={() => setDebtFilter(c.key)}
+                        className={`text-left rounded-lg border p-3 transition-colors ${bgCard} ${debtFilter === c.key ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor}`}
+                        data-testid={`my-finance-debt-filter-${c.key}`}
+                      >
+                        <p className={`text-xs ${textSecondary}`}>{c.label}</p>
+                        <p className={`text-xl font-bold ${c.cls}`}>{money(c.value)}</p>
+                      </button>
+                    ))}
                     {DEBT_WIZARD_OPTIONS.map((opt) => (
                       <div key={opt.type} className={`rounded-lg border ${borderColor} ${bgCard} p-3`} data-testid={`my-finance-debt-summary-${opt.type}`}>
                         <p className={`text-xs ${textSecondary}`}>{opt.title} ({debtTypeSummary.totals[opt.type].count})</p>
@@ -665,9 +684,13 @@ export default function MyFinancePage() {
                   <div className={`${bgCard} border ${borderColor} rounded-xl p-8 text-center text-sm ${textSecondary}`}>
                     No debts yet — click "Add Debt / EMI / Chit" to start tracking one.
                   </div>
+                ) : filteredDebts.length === 0 ? (
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-8 text-center text-sm ${textSecondary}`}>
+                    No debts match this filter.
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {debts.map((d) => {
+                    {filteredDebts.map((d) => {
                       const open = openDebtId === d.debt_id;
                       const closed = d.status === 'closed';
                       return (
