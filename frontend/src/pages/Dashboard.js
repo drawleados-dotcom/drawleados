@@ -59,6 +59,12 @@ const DEPT_STYLE = {
   business_dev: { icon: BarChart3, color: '#f59e0b' },
 };
 
+// Written out in full so Tailwind keeps these classes in the build.
+const OPS_GRID_COLS = {
+  1: 'xl:grid-cols-1', 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3',
+  4: 'xl:grid-cols-4', 5: 'xl:grid-cols-5', 6: 'xl:grid-cols-6',
+};
+
 const HR_LISTS = {
   present: { label: 'People Present', icon: UserCheck, color: '#22c55e' },
   absent: { label: 'Absent', icon: UserX, color: '#ef4444' },
@@ -229,8 +235,8 @@ const Dashboard = () => {
     }
   }, [hrDateRange, token]);
 
-  // Fetch Operations Data — every department's projects: To Do / Pending /
-  // Completed task counts and hours tracked in the range
+  // Fetch Operations Data — Projects page projects grouped by service: the
+  // range's To Do / Pending / Completed task counts and hours tracked in it
   const fetchOperationsData = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/our-tasks/department-summary`, {
@@ -426,12 +432,15 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-4 overflow-x-auto pb-2" data-testid="dashboard-ops-departments">
+            <div className={`grid gap-3 grid-cols-1 md:grid-cols-2 ${OPS_GRID_COLS[Math.min(opsDepartments.length, 6)] || ''}`} data-testid="dashboard-ops-departments">
+              {opsDepartments.length === 0 && (
+                <p className={`text-sm py-6 text-center col-span-full ${mutedClass}`}>No projects yet</p>
+              )}
               {opsDepartments.map((dept) => {
                 const style = DEPT_STYLE[dept.key] || { icon: Briefcase, color: '#6366f1' };
                 const DeptIcon = style.icon;
                 return (
-                  <div key={dept.key} className={`w-[340px] shrink-0 p-4 rounded-xl border ${sectionClass}`} data-testid={`dashboard-ops-dept-${dept.key}`}>
+                  <div key={dept.key} className={`min-w-0 p-3 rounded-xl border ${sectionClass}`} data-testid={`dashboard-ops-dept-${dept.key}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <DeptIcon className="h-5 w-5" style={{ color: style.color }} />
@@ -439,7 +448,7 @@ const Dashboard = () => {
                       </div>
                       <span className={`text-xs ${mutedClass}`}>{dept.projects.length} project{dept.projects.length === 1 ? '' : 's'}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 mb-3 text-center">
+                    <div className="grid grid-cols-4 gap-1 mb-3 text-center">
                       {[
                         ['To Do', dept.to_do, '#3b82f6'],
                         ['Pending', dept.pending, '#f59e0b'],
@@ -448,31 +457,28 @@ const Dashboard = () => {
                       ].map(([label, value, color]) => (
                         <div key={label}>
                           <p className="text-sm font-bold" style={{ color }}>{value}</p>
-                          <p className={`text-[10px] uppercase tracking-wide ${mutedClass}`}>{label}</p>
+                          <p className={`text-[9px] uppercase tracking-wide truncate ${mutedClass}`}>{label}</p>
                         </div>
                       ))}
                     </div>
-                    {dept.projects.length === 0 ? (
-                      <p className={`text-xs text-center py-4 ${mutedClass}`}>No projects yet</p>
-                    ) : (
-                      <div className="max-h-64 overflow-y-auto -mx-1">
-                        <table className="w-full text-xs">
+                    <div className="max-h-64 overflow-y-auto -mx-1">
+                        <table className="w-full table-fixed text-xs">
                           <thead className={`${mutedClass} sticky top-0 ${isDark ? 'bg-[#0f0f11]' : 'bg-gray-50'}`}>
                             <tr>
                               <th className="text-left font-medium px-1 py-1">Project</th>
-                              <th className="text-center font-medium px-1 py-1" title="All tasks">To Do</th>
-                              <th className="text-center font-medium px-1 py-1" title="Not completed">Pend.</th>
-                              <th className="text-center font-medium px-1 py-1">Done</th>
-                              <th className="text-right font-medium px-1 py-1">Hours</th>
+                              <th className="w-9 text-center font-medium px-0.5 py-1" title="Tasks for the selected dates">To Do</th>
+                              <th className="w-9 text-center font-medium px-0.5 py-1" title="Not completed">Pend.</th>
+                              <th className="w-9 text-center font-medium px-0.5 py-1">Done</th>
+                              <th className="w-14 text-right font-medium px-1 py-1">Hours</th>
                             </tr>
                           </thead>
                           <tbody>
                             {dept.projects.map((p) => (
                               <tr key={p.project_id || 'none'} className={`border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-                                <td className={`px-1 py-1.5 max-w-[120px] truncate ${textClass}`} title={p.project_name}>{p.project_name}</td>
-                                <td className="px-1 py-1.5 text-center text-[#3b82f6]">{p.to_do}</td>
-                                <td className="px-1 py-1.5 text-center text-[#f59e0b]">{p.pending}</td>
-                                <td className="px-1 py-1.5 text-center text-[#22c55e]">{p.completed}</td>
+                                <td className={`px-1 py-1.5 truncate ${textClass}`} title={p.project_name}>{p.project_name}</td>
+                                <td className="px-0.5 py-1.5 text-center text-[#3b82f6]">{p.to_do}</td>
+                                <td className="px-0.5 py-1.5 text-center text-[#f59e0b]">{p.pending}</td>
+                                <td className="px-0.5 py-1.5 text-center text-[#22c55e]">{p.completed}</td>
                                 <td className="px-1 py-1.5 text-right">
                                   <button
                                     type="button"
@@ -487,8 +493,7 @@ const Dashboard = () => {
                             ))}
                           </tbody>
                         </table>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
