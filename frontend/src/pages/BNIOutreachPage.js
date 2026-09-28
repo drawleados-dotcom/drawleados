@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Combobox } from '../components/ui/combobox';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Textarea } from '../components/ui/textarea';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
@@ -348,31 +348,61 @@ const BNIOutreachPage = () => {
       load();
     } catch (error) { toast.error('Failed to delete outreach entry'); }
   };
-  // Reach Out — asks the server for this entry's category's live template
-  // (name already filled in) and hands it to WhatsApp via a wa.me link.
-  const [reachingOutId, setReachingOutId] = useState(null);
-  const reachOut = async (o) => {
-    setReachingOutId(o.outreach_id);
-    try {
-      const res = await api.post(`/bni/outreach/${o.outreach_id}/reach-out`);
-      const digits = (o.phone || '').replace(/\D/g, '');
-      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(res.data.message)}`, '_blank', 'noopener,noreferrer');
-      toast.success(`Opened WhatsApp with "${res.data.template_name}"`);
-      const sentAt = new Date().toISOString();
-      const patch = {
-        template_id_sent: res.data.template_id, template_name_sent: res.data.template_name, reached_out_at: sentAt,
-      };
-      const appendHistory = (entry) => ({
-        ...entry, ...patch,
-        reach_out_history: [...(entry.reach_out_history || []), { template_id: res.data.template_id, template_name: res.data.template_name, sent_at: sentAt }],
-      });
-      setOutreach((prev) => prev.map((e) => (e.outreach_id === o.outreach_id ? appendHistory(e) : e)));
-      setViewEntry((prev) => (prev && prev.outreach_id === o.outreach_id ? appendHistory(prev) : prev));
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Could not reach out');
-    } finally {
-      setReachingOutId(null);
+  // Reach Out — opens an editable preview popup with the category's live
+  // template (name already filled in, client-side, same as renderTemplatePreview
+  // elsewhere) so the message can be checked/adjusted before it goes out.
+  // "Send" opens a blank tab SYNCHRONOUSLY on click (before the logging
+  // request), then points it at the wa.me link once that request settles —
+  // opening it only after an `await` is what popup blockers were silently
+  // eating, which is why the old "click and nothing happens" bug occurred.
+  const [reachOutModal, setReachOutModal] = useState(null); // { outreach_id, name, phone, message, template_id, template_name }
+  const [reachOutSaving, setReachOutSaving] = useState(false);
+  const openReachOut = (o) => {
+    if (!o.phone) { toast.error('This entry has no phone number'); return; }
+    const cat = categories.find((c) => c.category_id === o.category_id);
+    const live = (cat?.templates || []).find((t) => t.is_live);
+    if (!live) {
+      toast.error(`No live template set for "${cat?.name || o.category_name || 'this category'}" yet — add one from Target Category.`);
+      return;
     }
+    setReachOutModal({
+      outreach_id: o.outreach_id, name: o.name, phone: o.phone,
+      message: renderTemplatePreview(live.message, o.name),
+      template_id: live.template_id, template_name: live.name,
+    });
+  };
+  const copyReachOutMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(reachOutModal.message);
+      toast.success('Message copied');
+    } catch (error) {
+      toast.error('Could not copy — select the text manually');
+    }
+  };
+  const sendReachOut = () => {
+    if (!reachOutModal) return;
+    const win = window.open('', '_blank');
+    setReachOutSaving(true);
+    api.post(`/bni/outreach/${reachOutModal.outreach_id}/reach-out`)
+      .then((res) => {
+        const sentAt = new Date().toISOString();
+        const patch = { template_id_sent: res.data.template_id, template_name_sent: res.data.template_name, reached_out_at: sentAt };
+        const appendHistory = (entry) => ({
+          ...entry, ...patch,
+          reach_out_history: [...(entry.reach_out_history || []), { template_id: res.data.template_id, template_name: res.data.template_name, sent_at: sentAt }],
+        });
+        setOutreach((prev) => prev.map((e) => (e.outreach_id === reachOutModal.outreach_id ? appendHistory(e) : e)));
+        setViewEntry((prev) => (prev && prev.outreach_id === reachOutModal.outreach_id ? appendHistory(prev) : prev));
+      })
+      .catch((error) => {
+        toast.error(error.response?.data?.detail || 'Could not log this reach-out — sending anyway');
+      })
+      .finally(() => {
+        const digits = (reachOutModal.phone || '').replace(/\D/g, '');
+        if (win) win.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(reachOutModal.message)}`;
+        setReachOutSaving(false);
+        setReachOutModal(null);
+      });
   };
   const importRows = async (rows) => {
     const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -701,8 +731,8 @@ const BNIOutreachPage = () => {
                           </Button>
                           <Button
                             variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#10b981]"
-                            onClick={() => reachOut(o)}
-                            disabled={reachingOutId === o.outreach_id || !o.phone}
+                            onClick={() => openReachOut(o)}
+                            disabled={!o.phone}
                             title={!o.phone ? 'No phone number on this entry' : 'Reach Out on WhatsApp'}
                             data-testid={`bni-outreach-reachout-${o.outreach_id}`}
                           >
@@ -1127,8 +1157,8 @@ const BNIOutreachPage = () => {
                         <p className={`text-sm ${textPrimary} whitespace-pre-wrap mt-1`}>{renderTemplatePreview(liveTemplate.message, viewEntry.name)}</p>
                       </div>
                       <Button
-                        onClick={() => reachOut(viewEntry)}
-                        disabled={reachingOutId === viewEntry.outreach_id || !viewEntry.phone}
+                        onClick={() => openReachOut(viewEntry)}
+                        disabled={!viewEntry.phone}
                         className="w-full bg-[#10b981] hover:bg-[#0d9668] text-white"
                         data-testid="bni-outreach-view-reachout"
                       >
@@ -1233,6 +1263,34 @@ const BNIOutreachPage = () => {
               <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button onClick={save} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-save-btn">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Outreach'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!reachOutModal} onOpenChange={(o) => !o && setReachOutModal(null)}>
+          <DialogContent className={`${bgCard} max-w-lg`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Reach Out — {reachOutModal?.name}</DialogTitle>
+            </DialogHeader>
+            {reachOutModal && (
+              <div className="space-y-3">
+                <p className={`text-xs ${textSecondary}`}>Template: {reachOutModal.template_name} · To: {reachOutModal.phone}</p>
+                <Textarea
+                  value={reachOutModal.message}
+                  onChange={(e) => setReachOutModal((prev) => ({ ...prev, message: e.target.value }))}
+                  rows={7}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-reachout-textarea"
+                />
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={copyReachOutMessage} data-testid="bni-reachout-copy">
+                <Copy className="h-4 w-4 mr-1.5" /> Copy
+              </Button>
+              <Button onClick={sendReachOut} disabled={reachOutSaving} className="bg-[#10b981] hover:bg-[#0d9668] text-white" data-testid="bni-reachout-send">
+                <MessageCircle className="h-4 w-4 mr-1.5" /> {reachOutSaving ? 'Opening…' : 'Send on WhatsApp'}
               </Button>
             </DialogFooter>
           </DialogContent>
