@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, User, Settings as SettingsIcon, DollarSign,
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
   Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search,
-  Handshake, Bot, Linkedin, Send, TrendingUp, Wallet,
+  Handshake, Bot, Linkedin, Send, TrendingUp,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -29,10 +29,6 @@ export default function TopNav() {
   const userRole = user?.role || 'employee';
 
   const hasAccess = useMemo(() => (module) => {
-    // My Finance is every employee's own personal tracker — always visible,
-    // same "regardless of designation module_access" rule Sidebar.js gives
-    // My Profile.
-    if (module === 'my_finance') return true;
     // Dashboard is Super Admin/Admin's landing tab — always visible to
     // them, regardless of a designation's configured module_access list.
     if (module === 'dashboard' && (userRole === 'super_admin' || userRole === 'admin')) return true;
@@ -84,7 +80,6 @@ export default function TopNav() {
     { key: 'linkedin',      path: '/linkedin',        label: 'LinkedIn',       icon: Linkedin, group: 'marketing' },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
     { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
-    { key: 'my_finance',    path: '/my-finance',      label: 'My Finance',      icon: Wallet },
     // Clients Master View / Service and Packages moved under Finance's own
     // tab bar (next to Pipeline) — see ExpenseTab.js — so they're no longer
     // separate top-level nav items.
