@@ -138,6 +138,12 @@ export default function ProjectsPanel({
   const [savingTime, setSavingTime] = useState(false);
   const [timeEditOpen, setTimeEditOpen] = useState(false);
   const [timeEditDraft, setTimeEditDraft] = useState({ date: '', start_time: '', end_time: '' });
+  // Send for Approval popup — opened right after Finish, same flow/endpoint
+  // as My Tasks' Complete → Send for Approval, so completing a task from
+  // inside a project goes through the same approval routing everywhere.
+  const [approvalTask, setApprovalTask] = useState(null);
+  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   // Full audit-log timeline (created/edited/reassigned/status/deleted) —
   // Super Admin / Admin only, same endpoint and gate as My Tasks.
   const [timelineTask, setTimelineTask] = useState(null);
@@ -974,6 +980,17 @@ export default function ProjectsPanel({
       const res = await axios.post(`${API}/api/our-tasks/tasks/${viewOnlyTask.task_id}/time`, { action }, { headers });
       setViewOnlyTask(res.data);
       refreshSelectedProject();
+      // Finish hands straight off to Send for Approval — same flow My
+      // Tasks' Complete button uses — seeded from the just-finished task
+      // so an existing work link / approver carries across.
+      if (action === 'finish') {
+        setApprovalTask(res.data);
+        setApprovalDraft({
+          approver_role: res.data.approval_request?.approver_role || '',
+          note: '',
+          work_link: res.data.approval_request?.work_link || res.data.work_link || '',
+        });
+      }
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update timer');
     } finally {
@@ -3619,6 +3636,126 @@ export default function ProjectsPanel({
                     </Button>
                   )}
                   <Button variant="ghost" onClick={() => setViewOnlyTask(null)}>Close</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Send for Approval — opened right after Finish (see runTimeAction),
+            identical flow/endpoint to My Tasks' Complete → Send for Approval,
+            so completing a task inside a project routes through the same
+            approval chain as everywhere else. */}
+        {approvalTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => !approvalSubmitting && setApprovalTask(null)}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
+                    <CheckCircle2 className="h-5 w-5 text-[#6366f1]" />
+                    Send for Approval
+                  </h3>
+                  <button onClick={() => !approvalSubmitting && setApprovalTask(null)} className={textSecondary} data-testid="project-approval-close">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary} -mt-3`}>Task: <span className={textPrimary}>{approvalTask.task_name}</span></p>
+
+                {/* Approver role — restricted to PM / Operations / Marketing Head / HR */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>Approve By</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { value: 'pm', label: 'PM', color: 'bg-purple-500' },
+                      { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
+                      { value: 'marketing_head', label: 'Marketing Head', color: 'bg-pink-500' },
+                      { value: 'hr', label: 'HR', color: 'bg-rose-500' },
+                    ].map(opt => {
+                      const selected = approvalDraft.approver_role === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setApprovalDraft(prev => ({ ...prev, approver_role: opt.value }))}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                            selected ? `${opt.color} text-white` : `${bgSecondary} ${textSecondary} hover:opacity-80`
+                          }`}
+                          data-testid={`project-approval-role-${opt.value}`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Work Link (mandatory) */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>
+                    Work Link <span className="text-[#ef4444]">*</span>
+                    {approvalTask.work_link && (
+                      <span className={`ml-2 text-xs font-normal ${textSecondary}`}>(auto-fetched from task)</span>
+                    )}
+                  </Label>
+                  <input
+                    type="url"
+                    value={approvalDraft.work_link}
+                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, work_link: e.target.value }))}
+                    placeholder="https://figma.com/... or drive.google.com/..."
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="project-approval-work-link"
+                  />
+                </div>
+
+                {/* Note */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>Note <span className={`text-xs font-normal ${textSecondary}`}>(optional)</span></Label>
+                  <textarea
+                    value={approvalDraft.note}
+                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, note: e.target.value }))}
+                    rows={3}
+                    placeholder="Any context for the approver…"
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="project-approval-note"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setApprovalTask(null)} disabled={approvalSubmitting}>Cancel</Button>
+                  <Button
+                    onClick={async () => {
+                      if (!approvalDraft.approver_role) {
+                        toast.error('Please select an approver');
+                        return;
+                      }
+                      if (!approvalDraft.work_link || !approvalDraft.work_link.trim()) {
+                        toast.error('Work link is required');
+                        return;
+                      }
+                      setApprovalSubmitting(true);
+                      try {
+                        await axios.post(
+                          `${API}/api/our-tasks/tasks/${approvalTask.task_id}/request-approval`,
+                          { ...approvalDraft, work_link: approvalDraft.work_link.trim() },
+                          { headers }
+                        );
+                        toast.success('Approval request sent');
+                        setApprovalTask(null);
+                        setApprovalDraft({ approver_role: '', note: '', work_link: '' });
+                        setViewOnlyTask(null);
+                        refreshSelectedProject();
+                      } catch (error) {
+                        toast.error(error.response?.data?.detail || 'Failed to send for approval');
+                      } finally {
+                        setApprovalSubmitting(false);
+                      }
+                    }}
+                    disabled={approvalSubmitting}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white"
+                    data-testid="project-approval-submit-btn"
+                  >
+                    {approvalSubmitting ? 'Sending…' : 'Send for Approval'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
