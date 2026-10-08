@@ -53,9 +53,16 @@ async def is_hr_admin(user) -> bool:
     Returns True if ANY of:
       - role is admin / super_admin / hr_manager / hr_admin / project_manager
       - email is vinoth@drawlead.com (hardcoded super admin)
-      - user's designation has ANY of these in module_access:
-        hr_admin / hr_manager / hr / admin / employee_management
+      - user's OWN module_access has ANY of: hr_admin / hr_manager / hr / admin / employee_management
+      - user's designation has ANY of those same modules in its module_access
     Logged-out users always return False (raises elsewhere via auth dep).
+
+    This used to only check the designation's module_access, never the
+    user's own — so anyone granted HR access directly on their user record
+    (the same field has_hr_access() in access.py checks, which is what gates
+    the HR Admin page itself) could open the page but get "HR Admin access
+    required" 403s on every write, since module_access propagated to the
+    user never made it back to their designation record.
     """
     if user is None:
         return False
@@ -72,6 +79,14 @@ async def is_hr_admin(user) -> bool:
     # Hardcoded canonical super admin
     email = (_get(user, "email") or "").lower().strip()
     if email == "vinoth@drawlead.com":
+        return True
+
+    HR_MODULES = {"hr_admin", "hr_manager", "hr", "admin", "employee_management"}
+
+    # The user's own module_access — same field/mechanism has_hr_access()
+    # checks, which is what actually gates access to the HR Admin page.
+    own_mods = _get(user, "module_access") or []
+    if isinstance(own_mods, list) and any(m in HR_MODULES for m in own_mods):
         return True
 
     # Designation module_access check (best-effort; never throws)
@@ -91,7 +106,6 @@ async def is_hr_admin(user) -> bool:
     if not isinstance(mods, list):
         return False
 
-    HR_MODULES = {"hr_admin", "hr_manager", "hr", "admin", "employee_management"}
     return any(m in HR_MODULES for m in mods)
 
 
