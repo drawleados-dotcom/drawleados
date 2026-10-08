@@ -1404,16 +1404,13 @@ async def time_tracking_action(task_id: str, action_data: TimeTrackingAction, re
             
             time_tracking["status"] = "finished"
             time_tracking.pop("current_session_start", None)
-            
-            # Mark task as completed. Also clears any pasted reference
-            # screenshot -- it's only useful while the task is still being
-            # worked, not once it's done (same as the other two places a
-            # task can be marked completed: update_task / update_task_status).
-            await db.our_tasks.update_one(
-                {"task_id": task_id},
-                {"$set": {"status": "completed", "reference_image": None}}
-            )
-        
+            # Deliberately does NOT touch task.status — "finish" stops the
+            # timer only. Marking the task itself done is the Complete
+            # button's job (update_task_status), which routes through the
+            # Send for Approval flow. This used to also set status to
+            # "completed" directly here, silently bypassing that approval
+            # step every time someone just stopped their timer.
+
         await db.our_tasks.update_one(
             {"task_id": task_id},
             {"$set": {
