@@ -749,11 +749,31 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     setSubmitting(true);
     try {
-      await axios.put(`${API}/api/our-tasks/tasks/${editingTask.task_id}`, formData, { headers });
+      // Flipping Status to Completed straight from this form used to save
+      // it immediately — the one path that bypassed Send for Approval
+      // entirely (every other way to complete a task routes through it).
+      // Same exception as the Complete button: only a Super Admin editing
+      // their own task can skip approval.
+      const skipApproval = mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin';
+      const movingToCompleted = formData.status === 'completed' && editingTask.status !== 'completed';
+      const payload = movingToCompleted && !skipApproval
+        ? { ...formData, status: editingTask.status || 'pending' }
+        : formData;
+
+      const res = await axios.put(`${API}/api/our-tasks/tasks/${editingTask.task_id}`, payload, { headers });
       toast.success('Task updated successfully');
       setEditingTask(null);
       resetForm();
       loadTasks();
+
+      if (movingToCompleted && !skipApproval) {
+        setApprovalTask(res.data);
+        setApprovalDraft({
+          approver_role: res.data?.approval_request?.approver_role || '',
+          note: '',
+          work_link: res.data?.approval_request?.work_link || res.data?.work_link || '',
+        });
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to update task');
     } finally {
