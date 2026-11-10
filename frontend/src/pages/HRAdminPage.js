@@ -17,7 +17,8 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, ChevronRight, Layers, Check, Network, Coffee, Wallet, Handshake, UserX
+  ChevronDown, ChevronRight, Layers, Check, Network, Coffee, Wallet, Handshake, UserX,
+  History, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -3213,6 +3214,9 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
   // Active/Inactive, then within each, All/Full Time/Interns
   const [employeeStatusTab, setEmployeeStatusTab] = useState('active');
   const [employeeTypeTab, setEmployeeTypeTab] = useState('all');
+  // View History — the employee whose full journey (relieving record,
+  // lifetime attendance, leave, salary/payslips) is currently open.
+  const [historyEmployee, setHistoryEmployee] = useState(null);
 
   const statusScopedEmployees = employeeStatusTab === 'active' ? activeEmployees : inactiveEmployees;
   const isEmploymentType = (e, type) => (e.profile?.employment_type || 'full-time') === type;
@@ -3446,6 +3450,16 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setHistoryEmployee(emp)}
+                              className={`${textSecondary} border ${borderColor}`}
+                              title="View relieving details & full employment history"
+                              data-testid={`view-history-${emp.user_id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             {/* Demote button — only visible when caller IS vinoth@drawlead.com
                                 AND target row is NOT vinoth@drawlead.com.
                                 Demotes super_admin/admin → employee. */}
@@ -3523,6 +3537,196 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
           </Card>
         </div>
       )}
+
+      {historyEmployee && (
+        <EmployeeHistoryModal
+          employee={historyEmployee}
+          onClose={() => setHistoryEmployee(null)}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+      )}
+    </div>
+  );
+}
+
+// Employee History — a single read-only view of an employee's full
+// journey: joining date, relieving record(s) (with the exit checklist and
+// rehire call), lifetime attendance totals, leave requests, and salary/
+// payslip history. Opened from the Employees List's eye icon.
+function EmployeeHistoryModal({ employee, onClose, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const API = process.env.REACT_APP_BACKEND_URL;
+        const token = localStorage.getItem('session_token');
+        const res = await axios.get(
+          `${API}/api/hr/admin/employee/${employee.user_id}/history`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!cancelled) setData(res.data);
+      } catch (e) {
+        if (!cancelled) setError(e.response?.data?.detail || 'Failed to load employee history');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [employee.user_id]);
+
+  const fmtDate = (d) => {
+    if (!d) return '-';
+    try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch { return String(d).split('T')[0]; }
+  };
+
+  const Section = ({ title, icon: Icon, children, testid }) => (
+    <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid={testid}>
+      <h4 className={`text-sm font-medium ${textPrimary} mb-3 flex items-center gap-2`}>
+        {Icon && <Icon className="h-4 w-4" />} {title}
+      </h4>
+      {children}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <Card className={`${bgCard} border ${borderColor} w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col`} onClick={(e) => e.stopPropagation()}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className={`flex items-center gap-3 ${textPrimary}`}>
+            <History className="h-5 w-5 text-[#6366f1]" />
+            {employee.name} — Employment History
+          </CardTitle>
+          <Button variant="ghost" onClick={onClose} className={textSecondary} data-testid="employee-history-close">
+            <X className="h-5 w-5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="overflow-y-auto space-y-4 pt-4">
+          {loading ? (
+            <p className={`text-sm ${textSecondary}`}>Loading…</p>
+          ) : error ? (
+            <p className="text-sm text-[#ef4444]">{error}</p>
+          ) : !data ? null : (
+            <>
+              {/* Basics */}
+              <Section title="Employment" icon={Briefcase} testid="history-employment">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <p className={textSecondary}>Designation: <span className={textPrimary}>{data.designation || '-'}</span></p>
+                  <p className={textSecondary}>Department: <span className={textPrimary}>{data.department || '-'}</span></p>
+                  <p className={textSecondary}>Employment type: <span className={textPrimary}>{data.employment_type || '-'}</span></p>
+                  <p className={textSecondary}>Joining date: <span className={textPrimary}>{fmtDate(data.joining_date)}</span></p>
+                  <p className={textSecondary}>Status: <span className={textPrimary}>{data.status === 'inactive' ? 'Inactive' : 'Active'}</span></p>
+                </div>
+              </Section>
+
+              {/* Relieving details + journey, only if ever relieved */}
+              {data.relieving_date && (
+                <Section title="Relieving Details" icon={UserX} testid="history-relieving">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-2">
+                    <p className={textSecondary}>Relieving date: <span className={textPrimary}>{fmtDate(data.relieving_date)}</span></p>
+                    <p className={textSecondary}>Reason: <span className={textPrimary}>{data.relieving_reason || '-'}</span></p>
+                    <p className={textSecondary}>Rehire eligibility: <span className={textPrimary}>{data.rehire_eligibility === 'eligible' ? 'Eligible' : data.rehire_eligibility === 'not_eligible' ? 'Not Eligible' : '-'}</span></p>
+                    <p className={textSecondary}>Letter sent: <span className={textPrimary}>{data.relieving_letter_sent ? 'Yes' : 'No'}</span></p>
+                    <p className={textSecondary}>Settlement done: <span className={textPrimary}>{data.final_settlement_done ? 'Yes' : 'No'}</span></p>
+                    <p className={textSecondary}>Assets returned: <span className={textPrimary}>{data.assets_returned ? 'Yes' : 'No'}</span></p>
+                  </div>
+                  {(data.relieving_history || []).length > 1 && (
+                    <div className={`space-y-2 mt-3 pt-3 border-t ${borderColor}`}>
+                      <p className={`text-xs font-medium ${textPrimary}`}>Full Journey ({data.relieving_history.length} relieve events)</p>
+                      {data.relieving_history.map((h, i) => (
+                        <div key={i} className={`p-2 rounded border ${borderColor} text-xs`} data-testid={`history-journey-${i}`}>
+                          <p className={textPrimary}>{fmtDate(h.relieving_date)} — {h.relieving_reason || '-'}</p>
+                          <p className={textSecondary}>
+                            Rehire: {h.rehire_eligibility === 'eligible' ? 'Eligible' : h.rehire_eligibility === 'not_eligible' ? 'Not Eligible' : '-'} · By {h.relieved_by_name || '-'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              )}
+
+              {/* Lifetime attendance totals */}
+              <Section title="Attendance (Lifetime)" icon={Clock} testid="history-attendance">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <p className={textSecondary}>Present days: <span className={`${textPrimary} font-medium`}>{data.attendance_summary?.present_days ?? 0}</span></p>
+                  <p className={textSecondary}>Absent days: <span className={`${textPrimary} font-medium`}>{data.attendance_summary?.absent_days ?? 0}</span></p>
+                  <p className={textSecondary}>Leave days: <span className={`${textPrimary} font-medium`}>{data.attendance_summary?.leave_days ?? 0}</span></p>
+                  <p className={textSecondary}>Total hours: <span className={`${textPrimary} font-medium`}>{data.attendance_summary?.total_hours ?? 0}h</span></p>
+                </div>
+                {data.attendance_summary?.first_record_date && (
+                  <p className={`text-xs ${textSecondary} mt-2`}>
+                    Records from {fmtDate(data.attendance_summary.first_record_date)} to {fmtDate(data.attendance_summary.last_record_date)}
+                  </p>
+                )}
+              </Section>
+
+              {/* Leave requests */}
+              <Section title={`Leave Requests (${(data.leave_requests || []).length})`} icon={Calendar} testid="history-leaves">
+                {(data.leave_requests || []).length === 0 ? (
+                  <p className={`text-sm ${textSecondary}`}>No leave requests on file.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {data.leave_requests.map((l, i) => (
+                      <div key={l.leave_id || i} className="flex items-center justify-between text-xs" data-testid={`history-leave-${i}`}>
+                        <span className={textPrimary}>{l.leave_type || 'Leave'} · {fmtDate(l.start_date)}{l.end_date && l.end_date !== l.start_date ? ` – ${fmtDate(l.end_date)}` : ''}</span>
+                        <Badge className={
+                          l.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
+                          l.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          'bg-amber-500/20 text-amber-400'
+                        }>{l.status || 'pending'}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+
+              {/* Salary history (hikes) */}
+              <Section title={`Salary History (${(data.salary_history || []).length})`} icon={DollarSign} testid="history-salary">
+                {(data.salary_history || []).length === 0 ? (
+                  <p className={`text-sm ${textSecondary}`}>No salary revisions on file.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {data.salary_history.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs" data-testid={`history-salary-${i}`}>
+                        <span className={textPrimary}>Effective {fmtDate(s.effective_from)}</span>
+                        <span className={`${textPrimary} font-medium`}>₹{Number(s.amount || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+
+              {/* Payslips */}
+              <Section title={`Payslips (${(data.payslips || []).length})`} icon={FileText} testid="history-payslips">
+                {(data.payslips || []).length === 0 ? (
+                  <p className={`text-sm ${textSecondary}`}>No payslips generated yet.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {data.payslips.map((p, i) => (
+                      <div key={p.payslip_id || i} className="flex items-center justify-between text-xs" data-testid={`history-payslip-${i}`}>
+                        <span className={textPrimary}>{p.month}/{p.year}</span>
+                        <span className={textSecondary}>{p.status || '-'}</span>
+                        <span className={`${textPrimary} font-medium`}>₹{Number(p.net_salary || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

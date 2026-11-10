@@ -4312,6 +4312,75 @@ async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, reques
     return {"message": f"{user.get('name')} has been relieved", "user_id": user_id}
 
 
+@hr_router.get("/admin/employee/{user_id}/history")
+async def get_employee_history(user_id: str, request: Request):
+    """HR-Admin: one consolidated view of an employee's full journey —
+    employment basics, relieving record(s) with the exit checklist and
+    rehire call, lifetime attendance totals, leave requests, and salary/
+    payslip history. Powers the Employees List's eye icon (View History)."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    if not has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    profile = await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+
+    # Lifetime attendance totals — every record on file, not scoped to any
+    # one month/year (unlike the monthly/quarterly/yearly review summary).
+    attendance_records = await db.attendance.find(
+        {"user_id": user_id},
+        {"_id": 0, "date": 1, "status": 1, "total_hours": 1, "leave_type": 1},
+    ).sort("date", 1).to_list(5000)
+    present_days = sum(1 for a in attendance_records if a.get("status") == "present")
+    absent_days = sum(1 for a in attendance_records if a.get("status") == "absent")
+    leave_days = sum(1 for a in attendance_records if a.get("leave_type") or a.get("status") == "on-leave")
+    total_hours = sum(a.get("total_hours") or 0 for a in attendance_records)
+
+    leave_requests = await db.leave_requests.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+    payslips = await db.payslips.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort([("year", -1), ("month", -1)]).to_list(60)
+
+    salary_history = await db.salary_history.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("effective_from", -1).to_list(100)
+
+    return {
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "designation": profile.get("designation") or user.get("role"),
+        "department": profile.get("department"),
+        "employment_type": profile.get("employment_type"),
+        "joining_date": profile.get("joining_date"),
+        "status": profile.get("status") or user.get("status"),
+        "relieving_date": profile.get("relieving_date"),
+        "relieving_reason": profile.get("relieving_reason"),
+        "rehire_eligibility": profile.get("rehire_eligibility"),
+        "relieving_letter_sent": profile.get("relieving_letter_sent"),
+        "final_settlement_done": profile.get("final_settlement_done"),
+        "assets_returned": profile.get("assets_returned"),
+        "relieving_history": profile.get("relieving_history") or [],
+        "attendance_summary": {
+            "present_days": present_days,
+            "absent_days": absent_days,
+            "leave_days": leave_days,
+            "total_hours": round(total_hours, 1),
+            "first_record_date": attendance_records[0]["date"] if attendance_records else None,
+            "last_record_date": attendance_records[-1]["date"] if attendance_records else None,
+            "total_records": len(attendance_records),
+        },
+        "leave_requests": leave_requests,
+        "payslips": payslips,
+        "salary_history": salary_history,
+    }
+
+
 @hr_router.delete("/admin/employee/{user_id}")
 async def delete_employee(user_id: str, request: Request):
     """Delete an employee (Admin only) - Soft delete by setting status to inactive"""
