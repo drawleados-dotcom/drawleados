@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Combobox } from '../components/ui/combobox';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Textarea } from '../components/ui/textarea';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle, Copy } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle, Copy, Megaphone } from 'lucide-react';
+import BNICampaignsTab from '../components/bni/BNICampaignsTab';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
@@ -55,6 +56,7 @@ const TABS = [
   { key: 'category', label: 'Category', icon: Tag },
   { key: 'target', label: 'Target Category', icon: Target },
   { key: 'partnership', label: 'Partnership', icon: Handshake },
+  { key: 'campaigns', label: 'Campaigns', icon: Megaphone },
 ];
 
 const TYPE_OPTIONS = [
@@ -921,6 +923,13 @@ const BNIOutreachPage = () => {
                   'No partnership categories yet — mark categories as "Partnership" in the Category tab.'
                 )}
               </div>
+            )}
+
+            {activeTab === 'campaigns' && (
+              <BNICampaignsTab
+                categories={categories}
+                bgCard={bgCard} bgSecondary={bgSecondary} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={borderColor}
+              />
             )}
           </>
         )}

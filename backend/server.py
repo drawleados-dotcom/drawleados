@@ -61,6 +61,7 @@ from bni_one_to_one_routes import bni_one_to_one_router
 from bni_future_presentation_routes import bni_future_presentation_router
 from bni_my_gives_routes import bni_my_gives_router, bni_give_recipients_router
 from bni_outreach_routes import bni_outreach_router, bni_outreach_sources_router
+from bni_campaign_routes import bni_campaign_router, webhook_router as bni_campaign_webhook_router
 from linkedin_connections_routes import linkedin_connections_router
 from sheets_routes import sheets_router
 from access import has_hr_access
@@ -3064,6 +3065,9 @@ api_router.include_router(bni_my_gives_router)
 api_router.include_router(bni_give_recipients_router)
 api_router.include_router(bni_outreach_router)
 api_router.include_router(bni_outreach_sources_router)
+# Public Meta webhook first so /bni/campaigns/webhook isn't read as a campaign id.
+api_router.include_router(bni_campaign_webhook_router)
+api_router.include_router(bni_campaign_router)
 api_router.include_router(linkedin_connections_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
