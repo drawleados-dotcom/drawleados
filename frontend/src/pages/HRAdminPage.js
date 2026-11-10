@@ -3636,9 +3636,9 @@ function EmployeeHistoryModal({ employee, onClose, bgCard, bgSecondary, textPrim
                     <p className={textSecondary}>Relieving date: <span className={textPrimary}>{fmtDate(data.relieving_date)}</span></p>
                     <p className={textSecondary}>Reason: <span className={textPrimary}>{data.relieving_reason || '-'}</span></p>
                     <p className={textSecondary}>Rehire eligibility: <span className={textPrimary}>{data.rehire_eligibility === 'eligible' ? 'Eligible' : data.rehire_eligibility === 'not_eligible' ? 'Not Eligible' : '-'}</span></p>
-                    <p className={textSecondary}>Letter sent: <span className={textPrimary}>{data.relieving_letter_sent ? 'Yes' : 'No'}</span></p>
-                    <p className={textSecondary}>Settlement done: <span className={textPrimary}>{data.final_settlement_done ? 'Yes' : 'No'}</span></p>
-                    <p className={textSecondary}>Assets returned: <span className={textPrimary}>{data.assets_returned ? 'Yes' : 'No'}</span></p>
+                    <p className={textSecondary}>Relieving letter sent: <span className={textPrimary}>{data.relieving_letter_sent ? 'Yes' : 'No'}</span></p>
+                    <p className={textSecondary}>Full & final settlement done: <span className={textPrimary}>{data.final_settlement_done ? 'Yes' : 'No'}</span></p>
+                    <p className={textSecondary}>Company assets returned: <span className={textPrimary}>{data.assets_returned ? 'Yes' : 'No'}</span></p>
                   </div>
                   {(data.relieving_history || []).length > 1 && (
                     <div className={`space-y-2 mt-3 pt-3 border-t ${borderColor}`}>
