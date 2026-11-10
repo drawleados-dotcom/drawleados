@@ -3865,6 +3865,10 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
   const [relieveForm, setRelieveForm] = useState({
     relieving_date: new Date().toISOString().split('T')[0],
     relieving_reason: '',
+    rehire_eligibility: '',
+    relieving_letter_sent: false,
+    final_settlement_done: false,
+    assets_returned: false,
   });
   const [showRelieveConfirm, setShowRelieveConfirm] = useState(false);
   const [relievePassword, setRelievePassword] = useState('');
@@ -4033,6 +4037,10 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
     }
     if (!relieveForm.relieving_reason.trim()) {
       toast.error('Enter a relieving reason');
+      return;
+    }
+    if (!relieveForm.rehire_eligibility) {
+      toast.error('Select Rehire Eligibility');
       return;
     }
     setShowRelieveConfirm(true);
@@ -4689,8 +4697,37 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
                     <div className="space-y-1 text-sm">
                       <p className={textSecondary}>Relieving date: <span className={textPrimary}>{employee.profile.relieving_date?.split('T')[0]}</span></p>
                       <p className={textSecondary}>Reason: <span className={textPrimary}>{employee.profile.relieving_reason || '-'}</span></p>
+                      <p className={textSecondary}>Rehire eligibility: <span className={textPrimary}>{employee.profile.rehire_eligibility === 'eligible' ? 'Eligible' : employee.profile.rehire_eligibility === 'not_eligible' ? 'Not Eligible' : '-'}</span></p>
+                      <p className={textSecondary}>Relieving letter sent: <span className={textPrimary}>{employee.profile.relieving_letter_sent ? 'Yes' : 'No'}</span></p>
+                      <p className={textSecondary}>Full & final settlement done: <span className={textPrimary}>{employee.profile.final_settlement_done ? 'Yes' : 'No'}</span></p>
+                      <p className={textSecondary}>Company assets returned: <span className={textPrimary}>{employee.profile.assets_returned ? 'Yes' : 'No'}</span></p>
                       <p className={textSecondary}>Relieved by: <span className={textPrimary}>{employee.profile.relieved_by_name || '-'}</span></p>
                     </div>
+
+                    {/* Employment journey — every past relieve event on this
+                        profile, oldest first. Only shows once there's more
+                        than one (i.e. they were rehired and relieved again). */}
+                    {(employee.profile.relieving_history || []).length > 1 && (
+                      <div className={`mt-4 pt-4 border-t ${borderColor}`}>
+                        <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Employment Journey</h4>
+                        <div className="space-y-2">
+                          {employee.profile.relieving_history.map((h, i) => (
+                            <div key={i} className={`p-3 rounded-lg border ${borderColor} text-xs space-y-0.5`} data-testid={`relieving-history-${i}`}>
+                              <p className={`font-medium ${textPrimary}`}>
+                                Relieved {h.relieving_date?.split('T')[0]} — {h.relieving_reason || '-'}
+                              </p>
+                              <p className={textSecondary}>
+                                Rehire: {h.rehire_eligibility === 'eligible' ? 'Eligible' : h.rehire_eligibility === 'not_eligible' ? 'Not Eligible' : '-'}
+                                {' · '}Letter sent: {h.relieving_letter_sent ? 'Yes' : 'No'}
+                                {' · '}Settlement: {h.final_settlement_done ? 'Yes' : 'No'}
+                                {' · '}Assets returned: {h.assets_returned ? 'Yes' : 'No'}
+                              </p>
+                              <p className={textSecondary}>By {h.relieved_by_name || '-'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
@@ -4725,7 +4762,54 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRel
                           data-testid="relieving-reason-input"
                         />
                       </div>
+                      <div>
+                        <Label className={textSecondary}>Rehire Eligibility</Label>
+                        <Select
+                          value={relieveForm.rehire_eligibility}
+                          onValueChange={(v) => setRelieveForm((p) => ({ ...p, rehire_eligibility: v }))}
+                        >
+                          <SelectTrigger className={`${bgInput} border ${borderColor} mt-1`} data-testid="rehire-eligibility-select">
+                            <SelectValue placeholder="Select eligibility" />
+                          </SelectTrigger>
+                          <SelectContent className={`${bgCard} border ${borderColor}`}>
+                            <SelectItem value="eligible">Eligible</SelectItem>
+                            <SelectItem value="not_eligible">Not Eligible</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+
+                    {/* Offboarding checklist — common HR exit questions alongside the rehire call */}
+                    <div className="flex flex-wrap gap-4 mt-4">
+                      <label className={`flex items-center gap-2 text-sm ${textPrimary} cursor-pointer`}>
+                        <input
+                          type="checkbox"
+                          checked={relieveForm.relieving_letter_sent}
+                          onChange={(e) => setRelieveForm((p) => ({ ...p, relieving_letter_sent: e.target.checked }))}
+                          data-testid="relieving-letter-sent-checkbox"
+                        />
+                        Relieving letter sent
+                      </label>
+                      <label className={`flex items-center gap-2 text-sm ${textPrimary} cursor-pointer`}>
+                        <input
+                          type="checkbox"
+                          checked={relieveForm.final_settlement_done}
+                          onChange={(e) => setRelieveForm((p) => ({ ...p, final_settlement_done: e.target.checked }))}
+                          data-testid="final-settlement-checkbox"
+                        />
+                        Full & final settlement done
+                      </label>
+                      <label className={`flex items-center gap-2 text-sm ${textPrimary} cursor-pointer`}>
+                        <input
+                          type="checkbox"
+                          checked={relieveForm.assets_returned}
+                          onChange={(e) => setRelieveForm((p) => ({ ...p, assets_returned: e.target.checked }))}
+                          data-testid="assets-returned-checkbox"
+                        />
+                        Company assets returned
+                      </label>
+                    </div>
+
                     <Button
                       type="button"
                       onClick={handleRelieve}

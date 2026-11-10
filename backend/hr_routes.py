@@ -4233,6 +4233,10 @@ class RelieveEmployeeRequest(BaseModel):
     relieving_date: str  # YYYY-MM-DD
     relieving_reason: str
     password: str
+    rehire_eligibility: Optional[str] = None  # "eligible" | "not_eligible"
+    relieving_letter_sent: bool = False
+    final_settlement_done: bool = False
+    assets_returned: bool = False
 
 
 @hr_router.post("/admin/employee/{user_id}/relieve")
@@ -4269,20 +4273,39 @@ async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, reques
     except ValueError:
         raise HTTPException(status_code=400, detail="relieving_date must be YYYY-MM-DD")
 
+    rehire_eligibility = (payload.rehire_eligibility or "").strip() or None
+    if rehire_eligibility and rehire_eligibility not in ("eligible", "not_eligible"):
+        raise HTTPException(status_code=400, detail="rehire_eligibility must be 'eligible' or 'not_eligible'")
+
+    relieved_at = datetime.now(timezone.utc)
+
     await db.users.update_one(
         {"user_id": user_id},
         {"$set": {"status": "inactive", "is_active": False}},
     )
+    # Each relieve is appended to relieving_history rather than overwriting
+    # the last one — someone rehired and relieved again keeps their full
+    # employment journey instead of losing the earlier record.
+    history_entry = {
+        "relieving_date": payload.relieving_date,
+        "relieving_reason": payload.relieving_reason.strip(),
+        "rehire_eligibility": rehire_eligibility,
+        "relieving_letter_sent": payload.relieving_letter_sent,
+        "final_settlement_done": payload.final_settlement_done,
+        "assets_returned": payload.assets_returned,
+        "relieved_by": current_user.user_id,
+        "relieved_by_name": current_user.name,
+        "relieved_at": relieved_at,
+    }
     await db.employee_profiles.update_one(
         {"user_id": user_id},
-        {"$set": {
-            "status": "inactive",
-            "relieving_date": payload.relieving_date,
-            "relieving_reason": payload.relieving_reason.strip(),
-            "relieved_by": current_user.user_id,
-            "relieved_by_name": current_user.name,
-            "relieved_at": datetime.now(timezone.utc),
-        }},
+        {
+            "$set": {
+                "status": "inactive",
+                **history_entry,
+            },
+            "$push": {"relieving_history": history_entry},
+        },
         upsert=True,
     )
 
