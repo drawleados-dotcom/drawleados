@@ -32,6 +32,7 @@ import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -47,6 +48,32 @@ bni_campaign_router = APIRouter(prefix="/bni/campaigns", tags=["bni"])
 DEFAULT_API_VERSION = "v21.0"
 SEND_INTERVAL_SECONDS = 1.0       # gap between sends — gentle on number quality
 RUNNER_LEASE_SECONDS = 60         # a runner whose heartbeat is older is presumed dead
+SCHEDULER_TICK_SECONDS = 30       # how often scheduled campaigns are checked
+DEFAULT_TIMEZONE = "Asia/Kolkata"
+
+# Calling-code prefix -> time zone, for "send at 11 AM in each member's own
+# country". Countries spanning several zones get their main business zone
+# (US/Canada -> New York, Australia -> Sydney, Russia -> Moscow…). Unknown
+# prefixes fall back to the default time zone in Setup.
+PHONE_TIMEZONES = {
+    "1": "America/New_York", "7": "Europe/Moscow", "20": "Africa/Cairo", "27": "Africa/Johannesburg",
+    "30": "Europe/Athens", "31": "Europe/Amsterdam", "32": "Europe/Brussels", "33": "Europe/Paris",
+    "34": "Europe/Madrid", "39": "Europe/Rome", "40": "Europe/Bucharest", "41": "Europe/Zurich",
+    "43": "Europe/Vienna", "44": "Europe/London", "45": "Europe/Copenhagen", "46": "Europe/Stockholm",
+    "47": "Europe/Oslo", "48": "Europe/Warsaw", "49": "Europe/Berlin", "52": "America/Mexico_City",
+    "55": "America/Sao_Paulo", "60": "Asia/Kuala_Lumpur", "61": "Australia/Sydney", "62": "Asia/Jakarta",
+    "63": "Asia/Manila", "64": "Pacific/Auckland", "65": "Asia/Singapore", "66": "Asia/Bangkok",
+    "81": "Asia/Tokyo", "82": "Asia/Seoul", "84": "Asia/Ho_Chi_Minh", "86": "Asia/Shanghai",
+    "90": "Europe/Istanbul", "91": "Asia/Kolkata", "92": "Asia/Karachi", "93": "Asia/Kabul",
+    "94": "Asia/Colombo", "95": "Asia/Yangon", "98": "Asia/Tehran",
+    "212": "Africa/Casablanca", "233": "Africa/Accra", "234": "Africa/Lagos", "254": "Africa/Nairobi",
+    "255": "Africa/Dar_es_Salaam", "256": "Africa/Kampala", "351": "Europe/Lisbon", "353": "Europe/Dublin",
+    "852": "Asia/Hong_Kong", "853": "Asia/Macau", "855": "Asia/Phnom_Penh", "880": "Asia/Dhaka",
+    "886": "Asia/Taipei", "960": "Indian/Maldives", "961": "Asia/Beirut", "962": "Asia/Amman",
+    "964": "Asia/Baghdad", "965": "Asia/Kuwait", "966": "Asia/Riyadh", "968": "Asia/Muscat",
+    "971": "Asia/Dubai", "972": "Asia/Jerusalem", "973": "Asia/Bahrain", "974": "Asia/Qatar",
+    "975": "Asia/Thimphu", "977": "Asia/Kathmandu",
+}
 REPLY_WINDOW_HOURS = 24
 
 # Values a template variable can be filled from — keys of a bni_outreach row,
@@ -204,6 +231,32 @@ def classify_reply(text: str, is_button: bool) -> Optional[str]:
     return None
 
 
+def valid_timezone(tz: str) -> bool:
+    try:
+        ZoneInfo(tz)
+        return bool(tz)
+    except Exception:
+        return False
+
+
+def timezone_for_phone(wa_phone: str, default_tz: str = DEFAULT_TIMEZONE) -> str:
+    """Member's time zone from the calling code of their (normalized) number —
+    longest matching prefix wins, so 971 beats 9."""
+    digits = re.sub(r"\D", "", wa_phone or "")
+    for n in (3, 2, 1):
+        tz = PHONE_TIMEZONES.get(digits[:n])
+        if tz:
+            return tz
+    return default_tz if valid_timezone(default_tz) else DEFAULT_TIMEZONE
+
+
+def local_to_utc(date_str: str, time_str: str, tz: str) -> datetime:
+    """Wall-clock date + HH:MM in `tz` -> aware UTC datetime. Raises ValueError
+    on a malformed date/time or unknown zone."""
+    d = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    return d.replace(tzinfo=ZoneInfo(tz)).astimezone(timezone.utc)
+
+
 def verify_signature(app_secret: str, body: bytes, header: str) -> bool:
     if not app_secret:
         return True
@@ -246,6 +299,7 @@ async def _get_settings(db) -> dict:
     s["local_country_code"] = doc.get("local_country_code") or "91"
     s["international_country_code"] = doc.get("international_country_code") or "971"
     s["daily_send_cap"] = int(doc.get("daily_send_cap") or 250)
+    s["default_timezone"] = doc.get("default_timezone") or DEFAULT_TIMEZONE
     return s
 
 
@@ -287,6 +341,7 @@ class SettingsUpdate(BaseModel):
     local_country_code: Optional[str] = None
     international_country_code: Optional[str] = None
     daily_send_cap: Optional[int] = None
+    default_timezone: Optional[str] = None  # used for unknown country codes + as the default "one time zone"
 
 
 def _public_settings(s: dict) -> dict:
@@ -301,6 +356,7 @@ def _public_settings(s: dict) -> dict:
         "local_country_code": s["local_country_code"],
         "international_country_code": s["international_country_code"],
         "daily_send_cap": s["daily_send_cap"],
+        "default_timezone": s["default_timezone"],
         "webhook_path": "/api/bni/campaigns/webhook",
     }
 
@@ -325,6 +381,8 @@ async def update_settings(payload: SettingsUpdate, request: Request):
             if k in ("access_token", "app_secret") and not v:
                 continue
         data[k] = v
+    if "default_timezone" in data and not valid_timezone(data["default_timezone"]):
+        raise HTTPException(status_code=400, detail=f"Unknown time zone: {data['default_timezone']}")
     if "daily_send_cap" in data and data["daily_send_cap"] < 1:
         raise HTTPException(status_code=400, detail="Daily send cap must be at least 1")
     if not data:
@@ -569,12 +627,53 @@ async def _resolve_audience(db, f: AudienceFilter, s: dict):
     return eligible, skipped
 
 
+class CampaignSchedule(BaseModel):
+    date: str                # YYYY-MM-DD
+    time: str = "11:00"      # HH:MM, wall clock
+    mode: str = "local"      # local = that time in each member's own country | fixed = in `timezone`
+    timezone: str = ""       # used when mode == "fixed" (blank = default time zone)
+
+
+def _schedule_plan(schedule: CampaignSchedule, members: list, s: dict) -> dict:
+    """outreach_id -> (time zone, UTC send time) for every member. Raises
+    HTTPException on a bad date/time/zone."""
+    if schedule.mode not in ("local", "fixed"):
+        raise HTTPException(status_code=400, detail="Schedule mode must be 'local' or 'fixed'")
+    fixed_tz = schedule.timezone or s["default_timezone"]
+    if schedule.mode == "fixed" and not valid_timezone(fixed_tz):
+        raise HTTPException(status_code=400, detail=f"Unknown time zone: {fixed_tz}")
+    plan, cache = {}, {}
+    for m in members:
+        tz = fixed_tz if schedule.mode == "fixed" else timezone_for_phone(m["wa_phone"], s["default_timezone"])
+        if tz not in cache:
+            try:
+                cache[tz] = local_to_utc(schedule.date, schedule.time, tz)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Pick a valid date and time")
+        plan[m["outreach_id"]] = (tz, cache[tz])
+    return plan
+
+
+def _schedule_breakdown(plan: dict) -> list:
+    now = _now()
+    groups = {}
+    for tz, at in plan.values():
+        g = groups.setdefault(tz, {"timezone": tz, "count": 0, "send_at": _iso(at), "past": at <= now})
+        g["count"] += 1
+    return sorted(groups.values(), key=lambda g: g["send_at"])
+
+
+class PreviewRequest(AudienceFilter):
+    schedule: Optional[CampaignSchedule] = None
+
+
 @bni_campaign_router.post("/audience/preview")
-async def preview_audience(payload: AudienceFilter, request: Request):
+async def preview_audience(payload: PreviewRequest, request: Request):
     from server import get_current_user, db
     await get_current_user(request)
     s = await _get_settings(db)
     eligible, skipped = await _resolve_audience(db, payload, s)
+    breakdown = _schedule_breakdown(_schedule_plan(payload.schedule, eligible, s)) if payload.schedule else []
     by_category = {}
     for e in eligible:
         k = e.get("category_name") or "Uncategorised"
@@ -588,6 +687,7 @@ async def preview_audience(payload: AudienceFilter, request: Request):
             for e in eligible[:500]
         ],
         "daily_send_cap": s["daily_send_cap"],
+        "schedule_breakdown": breakdown,
     }
 
 
@@ -605,17 +705,21 @@ class CampaignCreate(BaseModel):
     variables: List[CampaignVariable] = []
     audience: AudienceFilter
     send_now: bool = False
+    schedule: Optional[CampaignSchedule] = None  # set = send later (send_now is ignored)
 
 
 async def _campaign_stats(db, campaign_ids: List[str]) -> dict:
     recips = await db.bni_campaign_recipients.find(
         {"campaign_id": {"$in": campaign_ids}},
-        {"_id": 0, "campaign_id": 1, "send_status": 1, "replied_at": 1, "response_status": 1, "outreach_id": 1},
+        {"_id": 0, "campaign_id": 1, "send_status": 1, "replied_at": 1, "response_status": 1, "outreach_id": 1, "send_after": 1},
     ).to_list(100000)
     outreach_status = await _outreach_status_map(db, {r["outreach_id"] for r in recips})
     stats = {cid: _empty_stats() for cid in campaign_ids}
     for r in recips:
-        _add_to_stats(stats[r["campaign_id"]], r, outreach_status.get(r["outreach_id"], ""))
+        st = stats[r["campaign_id"]]
+        _add_to_stats(st, r, outreach_status.get(r["outreach_id"], ""))
+        if r.get("send_status") == "queued" and r.get("send_after"):
+            st["next_send_at"] = min(st.get("next_send_at") or r["send_after"], r["send_after"])
     for st in stats.values():
         _finish_stats(st)
     return stats
@@ -717,6 +821,9 @@ async def create_campaign(payload: CampaignCreate, request: Request):
     eligible, skipped = await _resolve_audience(db, payload.audience, s)
     if not eligible:
         raise HTTPException(status_code=400, detail="No members to send to with these filters")
+    plan = _schedule_plan(payload.schedule, eligible, s) if payload.schedule else {}
+    if plan and all(at <= _now() for _, at in plan.values()):
+        raise HTTPException(status_code=400, detail="That time has already passed for every member — pick a later date or time.")
 
     now = _iso()
     campaign_id = f"bnicmp_{uuid.uuid4().hex[:10]}"
@@ -730,7 +837,8 @@ async def create_campaign(payload: CampaignCreate, request: Request):
         "variables": variables,
         "audience": payload.audience.dict(),
         "skipped": skipped,
-        "status": "draft",
+        "status": "scheduled" if plan else "draft",
+        "schedule": payload.schedule.dict() if payload.schedule else None,
         "pause_reason": "",
         "created_by": user.user_id,
         "created_at": now,
@@ -741,6 +849,7 @@ async def create_campaign(payload: CampaignCreate, request: Request):
     await db.bni_campaigns.insert_one(camp)
     recipients = []
     for e in eligible:
+        tz, at = plan.get(e["outreach_id"], ("", None))
         recipients.append({
             "recipient_id": f"bnircp_{uuid.uuid4().hex[:12]}",
             "campaign_id": campaign_id,
@@ -754,6 +863,9 @@ async def create_campaign(payload: CampaignCreate, request: Request):
             "rendered_body": render_body(tpl["body"], variable_values(e, variables)),
             "params": variable_values(e, variables),
             "send_status": "queued",
+            # Not before this UTC moment (None = as soon as the campaign runs).
+            "send_after": _iso(at) if at else None,
+            "timezone": tz,
             "wa_message_id": "",
             "error": "",
             "sent_at": None, "delivered_at": None, "read_at": None,
@@ -762,7 +874,7 @@ async def create_campaign(payload: CampaignCreate, request: Request):
             "created_at": now,
         })
     await db.bni_campaign_recipients.insert_many(recipients)
-    if payload.send_now:
+    if payload.send_now and not plan:
         await _start(db, campaign_id)
     camp.pop("_id", None)
     camp["recipient_count"] = len(recipients)
@@ -811,11 +923,23 @@ async def pause_campaign(campaign_id: str, request: Request):
     from server import get_current_user, db
     await get_current_user(request)
     res = await db.bni_campaigns.update_one(
-        {"campaign_id": campaign_id, "status": "sending"},
+        {"campaign_id": campaign_id, "status": {"$in": ["sending", "scheduled"]}},
         {"$set": {"status": "paused", "pause_reason": "Paused manually"}},
     )
     if res.matched_count == 0:
-        raise HTTPException(status_code=400, detail="Campaign isn't sending")
+        raise HTTPException(status_code=400, detail="Campaign isn't sending or scheduled")
+    return {"success": True}
+
+
+@bni_campaign_router.post("/{campaign_id}/send-now")
+async def send_campaign_now(campaign_id: str, request: Request):
+    """Drop the schedule: every still-queued member is sent right away."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    await db.bni_campaign_recipients.update_many(
+        {"campaign_id": campaign_id, "send_status": "queued"}, {"$set": {"send_after": None}},
+    )
+    await _start(db, campaign_id)
     return {"success": True}
 
 
@@ -857,19 +981,26 @@ async def _run_campaign(campaign_id: str):
                 if not camp or camp.get("status") != "sending" or camp.get("runner_id") != runner:
                     return
                 if await _sent_last_24h(db) >= s["daily_send_cap"]:
+                    # Waits rather than pausing — the scheduler picks it back
+                    # up as soon as the rolling 24-hour count drops below the cap.
                     await db.bni_campaigns.update_one({"campaign_id": campaign_id}, {"$set": {
-                        "status": "paused",
-                        "pause_reason": f"Daily send cap of {s['daily_send_cap']} reached — resume after 24 hours (or raise the cap in Setup once Meta lifts your tier).",
+                        "status": "scheduled",
+                        "pause_reason": f"Daily send cap of {s['daily_send_cap']} reached — continues automatically as the 24-hour window frees up (raise the cap in Setup once Meta lifts your tier).",
                     }})
                     return
                 r = await db.bni_campaign_recipients.find_one_and_update(
-                    {"campaign_id": campaign_id, "send_status": "queued"},
+                    {"campaign_id": campaign_id, "send_status": "queued",
+                     "$or": [{"send_after": None}, {"send_after": {"$lte": _iso()}}]},
                     {"$set": {"send_status": "sending", "claimed_at": _iso()}},
+                    sort=[("send_after", 1)],
                 )
                 if not r:
+                    # Nothing due now: either everyone's done, or the rest are
+                    # scheduled for later (e.g. 11 AM in a time zone further west).
+                    later = await db.bni_campaign_recipients.count_documents({"campaign_id": campaign_id, "send_status": "queued"})
                     await db.bni_campaigns.update_one(
                         {"campaign_id": campaign_id, "runner_id": runner},
-                        {"$set": {"status": "completed", "completed_at": _iso()}},
+                        {"$set": {"status": "scheduled"} if later else {"status": "completed", "completed_at": _iso()}},
                     )
                     return
                 try:
@@ -935,6 +1066,38 @@ async def delete_campaign(campaign_id: str, request: Request):
     await db.bni_campaign_recipients.delete_many({"campaign_id": campaign_id})
     await db.bni_campaigns.delete_one({"campaign_id": campaign_id})
     return {"success": True}
+
+
+async def campaign_scheduler_loop():
+    """Runs for the life of the process (started from server.py). Starts any
+    scheduled campaign that has members due, and restarts a "sending"
+    campaign whose runner died (e.g. a backend restart). Safe with several
+    worker processes: _run_campaign's lease lets only one of them send."""
+    from server import db
+    while True:
+        try:
+            now = _iso()
+            due = await db.bni_campaign_recipients.distinct(
+                "campaign_id",
+                {"send_status": {"$in": ["queued", "sending"]}, "$or": [{"send_after": None}, {"send_after": {"$lte": now}}]},
+            )
+            if due:
+                s = await _get_settings(db)
+                camps = await db.bni_campaigns.find(
+                    {"campaign_id": {"$in": due}, "status": {"$in": ["scheduled", "sending"]}}, {"_id": 0},
+                ).to_list(500)
+                for c in camps:
+                    if _is_running(c):
+                        continue
+                    if await _sent_last_24h(db) >= s["daily_send_cap"]:
+                        break
+                    try:
+                        await _start(db, c["campaign_id"])
+                    except HTTPException as e:  # e.g. WhatsApp not connected yet
+                        await db.bni_campaigns.update_one({"campaign_id": c["campaign_id"]}, {"$set": {"pause_reason": e.detail}})
+        except Exception as e:
+            logger.warning(f"campaign_scheduler_loop tick failed: {e}")
+        await asyncio.sleep(SCHEDULER_TICK_SECONDS)
 
 
 # ============================ recipients / responses ============================

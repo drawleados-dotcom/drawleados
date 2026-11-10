@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import {
   BarChart3, Megaphone, MessagesSquare, Inbox, Settings2, Plus, Play, Pause, Eye, Trash2, RefreshCw,
-  CheckCheck, Check, Clock, AlertCircle, Send, Copy, ExternalLink, Search, ChevronDown, ChevronRight,
+  CheckCheck, Check, Clock, AlertCircle, Send, Copy, ExternalLink, Search, ChevronDown, ChevronRight, Zap, CalendarClock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,6 +37,30 @@ const VARIABLE_SOURCES = [
 ];
 const TEMPLATE_TOKENS = ['name', 'company', 'category', 'chapter', 'location'];
 
+// Time zones offered for "one time zone" scheduling and the Setup default.
+// "Each member's local time" works out the zone from the phone's country
+// code server-side (bni_campaign_routes.PHONE_TIMEZONES), so any country works there.
+const TIMEZONE_OPTIONS = [
+  ['Asia/Kolkata', 'India (IST)'], ['Asia/Dubai', 'UAE (GST)'], ['Asia/Riyadh', 'Saudi Arabia'], ['Asia/Qatar', 'Qatar'],
+  ['Asia/Kuwait', 'Kuwait'], ['Asia/Bahrain', 'Bahrain'], ['Asia/Muscat', 'Oman'], ['Asia/Singapore', 'Singapore'],
+  ['Asia/Kuala_Lumpur', 'Malaysia'], ['Asia/Colombo', 'Sri Lanka'], ['Asia/Dhaka', 'Bangladesh'], ['Asia/Kathmandu', 'Nepal'],
+  ['Asia/Hong_Kong', 'Hong Kong'], ['Asia/Tokyo', 'Japan'], ['Australia/Sydney', 'Australia (Sydney)'], ['Pacific/Auckland', 'New Zealand'],
+  ['Europe/London', 'United Kingdom'], ['Europe/Paris', 'Central Europe'], ['Africa/Johannesburg', 'South Africa'], ['Africa/Nairobi', 'Kenya'],
+  ['America/New_York', 'US Eastern'], ['America/Chicago', 'US Central'], ['America/Los_Angeles', 'US Pacific'], ['America/Toronto', 'Canada (Toronto)'],
+  ['UTC', 'UTC'],
+];
+const tzLabel = (tz) => (TIMEZONE_OPTIONS.find(([v]) => v === tz)?.[1]) || (tz || '').split('/').pop().replace(/_/g, ' ');
+// A UTC instant shown as wall-clock time in a given zone ("12 Nov, 11:00").
+const fmtInTz = (iso, tz) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz || undefined });
+  } catch (e) {
+    return fmtDateTime(iso);
+  }
+};
+const tomorrowISO = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
+
 const SUMMARY_CARDS = [
   { key: 'contacted', label: 'Members Contacted' },
   { key: 'delivered', label: 'Delivered' },
@@ -61,6 +85,7 @@ const responseColor = (s) => ({
 
 const campaignStatusColor = (s) => ({
   draft: 'bg-[#71717a]/15 text-[#71717a] border-[#71717a]/40',
+  scheduled: 'bg-[#3b82f6]/15 text-[#3b82f6] border-[#3b82f6]/40',
   sending: 'bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/40',
   paused: 'bg-[#ef4444]/15 text-[#ef4444] border-[#ef4444]/40',
   completed: 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/40',
@@ -290,8 +315,9 @@ function CampaignsPanel({ campaigns, templates, categories, settings, reload, on
         await api.delete(`/bni/campaigns/${c.campaign_id}`);
         toast.success('Campaign deleted');
       } else {
+        if (action === 'send-now' && !window.confirm(`Send "${c.name}" to every remaining member right now, ignoring the schedule?`)) return;
         await api.post(`/bni/campaigns/${c.campaign_id}/${action}`);
-        toast.success(action === 'send' ? 'Sending started' : 'Campaign paused');
+        toast.success({ send: 'Resumed', 'send-now': 'Sending now', pause: 'Campaign paused' }[action]);
       }
       reload();
     } catch (e) {
@@ -304,7 +330,7 @@ function CampaignsPanel({ campaigns, templates, categories, settings, reload, on
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className={`text-sm ${textSecondary}`}>Each campaign sends one approved WhatsApp template to the members you pick, one message per second, up to your daily cap.</p>
+        <p className={`text-sm ${textSecondary}`}>Each campaign sends one approved WhatsApp template to the members you pick — now, or scheduled (e.g. 11 AM in each member's own country) — one message per second, up to your daily cap.</p>
         <Button onClick={() => setShowNew(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-campaigns-new-btn">
           <Plus className="h-4 w-4 mr-2" /> New Campaign
         </Button>
@@ -330,7 +356,7 @@ function CampaignsPanel({ campaigns, templates, categories, settings, reload, on
                   <tr key={c.campaign_id} data-testid={`bni-campaign-row-${c.campaign_id}`}>
                     <td className={`px-4 py-3 font-medium ${textPrimary}`}>
                       <button type="button" className="hover:underline text-left" onClick={() => setDetailId(c.campaign_id)}>{c.name}</button>
-                      {c.pause_reason && c.status === 'paused' && <p className="text-[11px] text-[#ef4444] max-w-[260px]">{c.pause_reason}</p>}
+                      {c.pause_reason && ['paused', 'scheduled'].includes(c.status) && <p className={`text-[11px] max-w-[260px] ${c.status === 'paused' ? 'text-[#ef4444]' : 'text-[#b45309]'}`}>{c.pause_reason}</p>}
                     </td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{c.template_name}</td>
                     <td className="px-4 py-3">
@@ -338,6 +364,11 @@ function CampaignsPanel({ campaigns, templates, categories, settings, reload, on
                     </td>
                     <td className={`px-4 py-3 ${textSecondary} whitespace-nowrap`}>
                       {done} / {st.total}{st.failed ? <span className="text-[#ef4444]"> · {st.failed} failed</span> : null}
+                      {st.next_send_at && st.queued > 0 && c.status !== 'sending' && (
+                        <p className="text-[11px] text-[#3b82f6] inline-flex items-center gap-1 mt-0.5" title="Next scheduled send, in your time">
+                          <CalendarClock className="h-3 w-3" /> Next {fmtDateTime(st.next_send_at)}
+                        </p>
+                      )}
                     </td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{st.delivered || 0}</td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{st.replied || 0} <span className="text-[11px]">({st.reply_rate || 0}%)</span></td>
@@ -348,11 +379,16 @@ function CampaignsPanel({ campaigns, templates, categories, settings, reload, on
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#6366f1]" onClick={() => setDetailId(c.campaign_id)} title="View"><Eye className="h-4 w-4" /></Button>
                         {(c.status === 'draft' || c.status === 'paused' || stalled) && st.queued > 0 && (
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#10b981]" disabled={busyId === c.campaign_id} onClick={() => act(c, 'send')} title={c.status === 'draft' ? 'Send' : 'Resume'} data-testid={`bni-campaign-send-${c.campaign_id}`}>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#10b981]" disabled={busyId === c.campaign_id} onClick={() => act(c, 'send')} title={c.status === 'draft' ? 'Send' : 'Resume (keeps the schedule)'} data-testid={`bni-campaign-send-${c.campaign_id}`}>
                             <Play className="h-4 w-4" />
                           </Button>
                         )}
-                        {c.status === 'sending' && !stalled && (
+                        {(c.status === 'scheduled' || (c.status === 'paused' && st.next_send_at)) && st.queued > 0 && (
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#6366f1]" disabled={busyId === c.campaign_id} onClick={() => act(c, 'send-now')} title="Send now (ignore schedule)" data-testid={`bni-campaign-send-now-${c.campaign_id}`}>
+                            <Zap className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {((c.status === 'sending' && !stalled) || c.status === 'scheduled') && (
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#f59e0b]" disabled={busyId === c.campaign_id} onClick={() => act(c, 'pause')} title="Pause"><Pause className="h-4 w-4" /></Button>
                         )}
                         {c.status !== 'sending' && (
@@ -389,6 +425,11 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
   const [locationType, setLocationType] = useState('all');
   const [statuses, setStatuses] = useState(['To do', 'New Lead']);
   const [skipMessaged, setSkipMessaged] = useState(true);
+  const [when, setWhen] = useState('now'); // now | schedule
+  const [schedDate, setSchedDate] = useState(tomorrowISO());
+  const [schedTime, setSchedTime] = useState('11:00');
+  const [schedMode, setSchedMode] = useState('local'); // local = each member's country | fixed
+  const [schedTz, setSchedTz] = useState(settings?.default_timezone || 'Asia/Kolkata');
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -409,15 +450,16 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
   }, [categories, catSearch]);
 
   const audience = { category_names: selectedCats, location_type: locationType, statuses, skip_previously_messaged: skipMessaged, exclude_outreach_ids: [] };
-  // Any change to the audience invalidates the last preview.
-  useEffect(() => { setPreview(null); }, [selectedCats, locationType, statuses, skipMessaged]);
+  const schedule = when === 'schedule' ? { date: schedDate, time: schedTime, mode: schedMode, timezone: schedMode === 'fixed' ? schedTz : '' } : null;
+  // Any change to the audience or schedule invalidates the last preview.
+  useEffect(() => { setPreview(null); }, [selectedCats, locationType, statuses, skipMessaged, when, schedDate, schedTime, schedMode, schedTz]);
 
   const toggle = (list, setList, v) => setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   const runPreview = async () => {
     setPreviewing(true);
     try {
-      setPreview((await api.post('/bni/campaigns/audience/preview', audience)).data);
+      setPreview((await api.post('/bni/campaigns/audience/preview', { ...audience, schedule })).data);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to preview audience');
     } finally {
@@ -429,11 +471,13 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
     if (!name.trim()) { toast.error('Give the campaign a name'); return; }
     if (!tpl) { toast.error('Pick an approved template'); return; }
     if (variables.some((v) => v.source === 'custom' && !v.value.trim())) { toast.error('Fill in the custom text variables'); return; }
-    if (sendNow && preview && !window.confirm(`Send to ${preview.eligible} member${preview.eligible === 1 ? '' : 's'} now?`)) return;
+    if (schedule && (!schedDate || !schedTime)) { toast.error('Pick a date and time'); return; }
+    const verb = schedule ? 'Schedule' : 'Send';
+    if (sendNow && preview && !window.confirm(`${verb} to ${preview.eligible} member${preview.eligible === 1 ? '' : 's'}${schedule ? '' : ' now'}?`)) return;
     setSaving(true);
     try {
-      const res = await api.post('/bni/campaigns', { name, template_id: templateId, variables, audience, send_now: sendNow });
-      toast.success(`${sendNow ? 'Sending' : 'Draft saved'} — ${res.data.recipient_count} members`);
+      const res = await api.post('/bni/campaigns', { name, template_id: templateId, variables, audience, send_now: sendNow, schedule: sendNow ? schedule : null });
+      toast.success(`${sendNow ? (schedule ? 'Scheduled' : 'Sending') : 'Draft saved'} — ${res.data.recipient_count} members`);
       onCreated();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to create campaign');
@@ -548,6 +592,46 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
                 ))}
               </div>
             </div>
+          </section>
+
+          {/* 3. When */}
+          <section className="space-y-3">
+            <p className={`font-semibold ${textPrimary}`}>3. When to send</p>
+            <div className={`inline-flex rounded-lg border ${borderColor} p-1 ${bgSecondary}`}>
+              {[['now', 'Send now'], ['schedule', 'Schedule']].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setWhen(k)} className={`px-4 py-1.5 text-sm font-medium rounded-md ${when === k ? 'bg-[#6366f1] text-white' : textSecondary}`} data-testid={`bni-campaign-when-${k}`}>{l}</button>
+              ))}
+            </div>
+            {when === 'schedule' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-[160px_130px_1fr] gap-3">
+                  <div>
+                    <Label className={textPrimary}>Date</Label>
+                    <Input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-campaign-sched-date" />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Time</Label>
+                    <Input type="time" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-campaign-sched-time" />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label className={textPrimary}>Time zone</Label>
+                    <Select value={schedMode === 'local' ? '__local__' : schedTz} onValueChange={(v) => { if (v === '__local__') setSchedMode('local'); else { setSchedMode('fixed'); setSchedTz(v); } }}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-campaign-sched-tz"><SelectValue /></SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        <SelectItem value="__local__">Each member's local time (by phone country code)</SelectItem>
+                        {TIMEZONE_OPTIONS.map(([v, l]) => <SelectItem key={v} value={v}>{l} — {v}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className={`text-xs ${textSecondary}`}>
+                  {schedMode === 'local'
+                    ? `Every member gets it at ${schedTime || '—'} in their own country — e.g. ${schedTime} in Dubai for +971 numbers, ${schedTime} in India for +91. Unknown country codes use ${tzLabel(settings?.default_timezone || 'Asia/Kolkata')} (change in Setup).`
+                    : `Everyone gets it at ${schedTime || '—'} ${tzLabel(schedTz)} time.`}
+                  {' '}Preview the audience to see the exact send times.
+                </p>
+              </div>
+            )}
             <Button variant="outline" onClick={runPreview} disabled={previewing} data-testid="bni-campaign-preview">
               <Eye className="h-4 w-4 mr-2" /> {previewing ? 'Checking…' : 'Preview audience'}
             </Button>
@@ -557,6 +641,25 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
                 <p className={`text-xs ${textSecondary}`}>
                   Skipped — no valid phone: {preview.skipped.no_phone} · already messaged: {preview.skipped.already_messaged} · opted out: {preview.skipped.opted_out} · duplicate phone: {preview.skipped.duplicate_phone}
                 </p>
+                {(preview.schedule_breakdown || []).length > 0 && (
+                  <div className={`rounded-md border ${borderColor} overflow-hidden`}>
+                    <table className="w-full text-xs">
+                      <thead className={bgSecondary}>
+                        <tr>{['Time zone', 'Members', 'Their local time', 'Your time'].map((h) => <th key={h} className={`px-2 py-1.5 text-left font-medium ${textSecondary}`}>{h}</th>)}</tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {preview.schedule_breakdown.map((g) => (
+                          <tr key={g.timezone}>
+                            <td className={`px-2 py-1.5 ${textPrimary}`}>{tzLabel(g.timezone)} <span className={textSecondary}>({g.timezone})</span></td>
+                            <td className={`px-2 py-1.5 ${textSecondary}`}>{g.count}</td>
+                            <td className={`px-2 py-1.5 ${textPrimary}`}>{fmtInTz(g.send_at, g.timezone)}</td>
+                            <td className={`px-2 py-1.5 ${g.past ? 'text-[#b45309]' : textSecondary}`}>{g.past ? 'Already passed — sends right away' : fmtDateTime(g.send_at)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 {overCap && (
                   <p className="text-xs text-[#b45309]">
                     That's more than your daily cap of {settings.daily_send_cap}. The campaign will pause at the cap and you can resume it the next day.
@@ -575,7 +678,8 @@ function NewCampaignDialog({ templates, categories, settings, onClose, onCreated
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button variant="outline" disabled={saving || !tpl} onClick={() => create(false)}>Save as Draft</Button>
           <Button className="bg-[#10b981] hover:bg-[#059669] text-white" disabled={saving || !tpl || !preview || preview.eligible === 0} onClick={() => create(true)} title={!preview ? 'Preview the audience first' : ''} data-testid="bni-campaign-send-now">
-            <Send className="h-4 w-4 mr-2" /> {saving ? 'Creating…' : 'Create & Send'}
+            {when === 'schedule' ? <CalendarClock className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            {saving ? 'Creating…' : when === 'schedule' ? 'Create & Schedule' : 'Create & Send'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -662,7 +766,13 @@ function RecipientsTable({ rows, showCampaign, onChangeStatus, onOpenChat, empty
               <td className={`px-3 py-2.5 ${textSecondary}`}>{r.category_name}</td>
               {showCampaign && <td className={`px-3 py-2.5 ${textSecondary}`}>{r.campaign_name}</td>}
               <td className={`px-3 py-2.5 ${textSecondary} whitespace-nowrap`}>
-                <span className="inline-flex items-center gap-1.5"><SendStatusIcon status={r.send_status} error={r.error} /> {fmtDateTime(r.sent_at)}</span>
+                {r.send_status === 'queued' && r.send_after ? (
+                  <span className="inline-flex items-center gap-1.5 text-[#3b82f6]" title={`Your time: ${fmtDateTime(r.send_after)}`}>
+                    <CalendarClock className="h-4 w-4" /> {fmtInTz(r.send_after, r.timezone)} {tzLabel(r.timezone)}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5"><SendStatusIcon status={r.send_status} error={r.error} /> {fmtDateTime(r.sent_at)}</span>
+                )}
                 {r.send_status === 'failed' && <p className="text-[11px] text-[#ef4444] max-w-[220px]">{r.error}</p>}
               </td>
               <td className={`px-3 py-2.5 ${textSecondary} max-w-[320px]`}>
@@ -728,11 +838,17 @@ function CampaignDetailDialog({ campaignId, onClose, onOpenChat, ...theme }) {
             <div className={`flex flex-wrap gap-x-4 gap-y-1 text-sm ${textSecondary}`}>
               <span>Template <b className={textPrimary}>{camp.template_name}</b></span>
               <span>Status <Badge className={`border ${campaignStatusColor(camp.status)}`}>{camp.status}</Badge></span>
+              {camp.schedule && (
+                <span className="inline-flex items-center gap-1">
+                  <CalendarClock className="h-4 w-4" /> {camp.schedule.date} {camp.schedule.time}{' '}
+                  {camp.schedule.mode === 'local' ? "each member's local time" : tzLabel(camp.schedule.timezone)}
+                </span>
+              )}
               <span>Started {fmtDateTime(camp.started_at)}</span>
               {camp.completed_at && <span>Completed {fmtDateTime(camp.completed_at)}</span>}
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-              {[['Total', st.total], ['Queued', st.queued], ...SUMMARY_CARDS.filter((c) => c.key !== 'not_interested').map((c) => [c.label, st[c.key]])].map(([l, v]) => (
+              {[['Total', st.total], [camp.schedule ? 'Scheduled' : 'Queued', st.queued], ...SUMMARY_CARDS.filter((c) => c.key !== 'not_interested').map((c) => [c.label, st[c.key]])].map(([l, v]) => (
                 <div key={l} className={`rounded-lg border ${borderColor} p-2`}>
                   <p className={`text-[10px] ${textSecondary} leading-tight`}>{l}</p>
                   <p className={`text-lg font-bold ${textPrimary}`}>{v || 0}</p>
@@ -741,7 +857,7 @@ function CampaignDetailDialog({ campaignId, onClose, onOpenChat, ...theme }) {
             </div>
             <div className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${bgSecondary} ${textSecondary}`}>{camp.template_body}</div>
             <div className={`inline-flex flex-wrap rounded-lg border ${borderColor} p-1 ${bgSecondary}`}>
-              {[['all', 'All'], ['replied', 'Replied'], ['not_replied', 'No reply'], ['failed', 'Failed'], ['queued', 'Queued']].map(([k, l]) => (
+              {[['all', 'All'], ['replied', 'Replied'], ['not_replied', 'No reply'], ['failed', 'Failed'], ['queued', camp.schedule ? 'Scheduled' : 'Queued']].map(([k, l]) => (
                 <button key={k} type="button" onClick={() => setFilter(k)} className={`px-3 py-1 text-xs font-medium rounded-md ${filter === k ? 'bg-[#6366f1] text-white' : textSecondary}`}>{l}</button>
               ))}
             </div>
@@ -964,6 +1080,7 @@ function SetupPanel({ settings, templates, reloadSettings, reloadTemplates, bgCa
       phone_number_id: settings.phone_number_id, waba_id: settings.waba_id, verify_token: settings.verify_token,
       api_version: settings.api_version, local_country_code: settings.local_country_code,
       international_country_code: settings.international_country_code, daily_send_cap: settings.daily_send_cap,
+      default_timezone: settings.default_timezone || 'Asia/Kolkata',
     });
   }, [settings]);
 
@@ -1083,6 +1200,14 @@ function SetupPanel({ settings, templates, reloadSettings, reloadTemplates, bgCa
           {field('Country code for Local numbers', 'local_country_code', { placeholder: '91' })}
           {field('Country code for International numbers', 'international_country_code', { placeholder: '971' })}
           {field('Daily send cap', 'daily_send_cap', { type: 'number', min: 1 })}
+          <div>
+            <Label className={textPrimary}>Default time zone</Label>
+            <Select value={form.default_timezone} onValueChange={(v) => setForm({ ...form, default_timezone: v })}>
+              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-72">{TIMEZONE_OPTIONS.map(([v, l]) => <SelectItem key={v} value={v}>{l} — {v}</SelectItem>)}</SelectContent>
+            </Select>
+            <p className={`text-[11px] mt-1 ${textSecondary}`}>Used for scheduled sends to numbers whose country isn't recognised.</p>
+          </div>
         </div>
         <p className={`text-xs ${textSecondary}`}>Country codes are added to numbers saved without one (e.g. “055 840 8421” → 971558408421). Numbers that start with + or a country code are used as-is.</p>
         <div className="flex gap-2 flex-wrap">

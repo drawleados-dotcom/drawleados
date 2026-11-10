@@ -124,3 +124,44 @@ def test_stats_are_cumulative_and_rates():
     assert st["delivered"] == 2 and st["read"] == 1 and st["replied"] == 2 and st["not_replied"] == 1
     assert st["interested"] == 2 and st["scheduled"] == 1 and st["completed"] == 1
     assert st["reply_rate"] == 66.7 and st["meeting_rate"] == 33.3
+
+
+# ------------------------------------------------------------ scheduling
+
+@pytest.mark.parametrize("phone,expected", [
+    ("971558408421", "Asia/Dubai"),        # 3-digit code beats the 1-digit "9…" fallbacks
+    ("919876543210", "Asia/Kolkata"),
+    ("6591234567", "Asia/Singapore"),
+    ("447700900123", "Europe/London"),
+    ("12125550123", "America/New_York"),
+    ("9999999999", "Asia/Kolkata"),        # unknown code -> default zone
+])
+def test_timezone_for_phone(phone, expected):
+    assert c.timezone_for_phone(phone, "Asia/Kolkata") == expected
+
+
+def test_timezone_for_phone_bad_default_falls_back():
+    assert c.timezone_for_phone("9999999999", "Not/AZone") == c.DEFAULT_TIMEZONE
+
+
+def test_local_to_utc_same_wall_clock_different_instants():
+    dubai = c.local_to_utc("2026-11-12", "11:00", "Asia/Dubai")
+    india = c.local_to_utc("2026-11-12", "11:00", "Asia/Kolkata")
+    london = c.local_to_utc("2026-11-12", "11:00", "Europe/London")
+    assert dubai.isoformat() == "2026-11-12T07:00:00+00:00"
+    assert india.isoformat() == "2026-11-12T05:30:00+00:00"
+    assert london.isoformat() == "2026-11-12T11:00:00+00:00"
+    # Daylight saving is honoured: London is UTC+1 in July
+    assert c.local_to_utc("2026-07-01", "11:00", "Europe/London").isoformat() == "2026-07-01T10:00:00+00:00"
+    with pytest.raises(ValueError):
+        c.local_to_utc("2026-13-40", "11:00", "Asia/Dubai")
+
+
+def test_schedule_plan_local_vs_fixed():
+    s = {"default_timezone": "Asia/Kolkata"}
+    members = [{"outreach_id": "a", "wa_phone": "971558408421"}, {"outreach_id": "b", "wa_phone": "919876543210"}]
+    local = c._schedule_plan(c.CampaignSchedule(date="2026-11-12", time="11:00", mode="local"), members, s)
+    assert local["a"][0] == "Asia/Dubai" and local["b"][0] == "Asia/Kolkata"
+    assert local["a"][1] != local["b"][1]
+    fixed = c._schedule_plan(c.CampaignSchedule(date="2026-11-12", time="11:00", mode="fixed", timezone="Asia/Dubai"), members, s)
+    assert fixed["a"] == fixed["b"]
