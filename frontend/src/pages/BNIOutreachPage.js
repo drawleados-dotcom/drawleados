@@ -857,6 +857,24 @@ const BNIOutreachPage = () => {
                         {o.group && <span>· {o.group}</span>}
                         {o.source_name && <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40">{o.source_name}</Badge>}
                       </div>
+                      {/* Line 3: latest remark summary, full width — View more
+                          opens the full dated Remarks popup. */}
+                      {(() => {
+                        const latest = sortedRemarks(o)[0];
+                        const text = latest ? latest.text : o.remarks;
+                        if (!text) return null;
+                        const count = (o.remark_log || []).length;
+                        return (
+                          <div className={`mt-3 flex items-center gap-3 rounded-lg border ${borderColor} ${bgSecondary} px-3 py-2 w-full`} data-testid={`bni-outreach-latest-remark-${o.outreach_id}`}>
+                            <StickyNote className="h-4 w-4 text-[#6366f1] shrink-0" />
+                            {latest && <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 shrink-0">{fmtRemarkDate(latest.date)}</Badge>}
+                            <p className={`text-sm ${textPrimary} truncate flex-1 min-w-0`} title={text}>{text}</p>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-[#6366f1] shrink-0" onClick={() => openRemarks(o)} data-testid={`bni-outreach-remarks-more-${o.outreach_id}`}>
+                              View more{count > 1 ? ` (${count})` : ''}
+                            </Button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))
                 )}
