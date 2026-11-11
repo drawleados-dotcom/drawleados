@@ -15,10 +15,10 @@ import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Hand
 import BNICampaignsTab from '../components/bni/BNICampaignsTab';
 import { toast } from 'sonner';
 
-const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
+const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Brochure', 'Follow Up', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
 
 // Summary card cells — every stage (in this order).
-const SUMMARY_STATUSES = ['New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later', 'To do'];
+const SUMMARY_STATUSES = ['New Lead', 'Contacted', 'RNR', 'Brochure', 'Follow Up', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later', 'To do'];
 
 const OUTREACH_IMPORT_FIELDS = [
   { key: 'name', label: 'Name', required: true, synonyms: ['name'] },

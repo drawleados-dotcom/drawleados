@@ -22,7 +22,7 @@ bni_outreach_router = APIRouter(prefix="/bni/outreach", tags=["bni"])
 bni_outreach_sources_router = APIRouter(prefix="/bni/outreach-sources", tags=["bni"])
 
 OUTREACH_STATUSES = [
-    "To do", "New Lead", "Contacted", "RNR", "Scheduled One to One",
+    "To do", "New Lead", "Contacted", "RNR", "Brochure", "Follow Up", "Scheduled One to One",
     "One to One Completed", "Not Interested", "Relationship", "Lead", "Later",
 ]
 

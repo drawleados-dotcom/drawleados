@@ -26,7 +26,7 @@ const SUB_TABS = [
 ];
 
 const RESPONSE_STATUSES = ['Pending', 'Replied', 'Interested', 'Not Interested', 'Scheduled One to One', 'One to One Completed'];
-const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
+const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Brochure', 'Follow Up', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
 const VARIABLE_SOURCES = [
   { value: 'name', label: 'Member name' },
   { value: 'brand_name', label: 'Company / brand' },
