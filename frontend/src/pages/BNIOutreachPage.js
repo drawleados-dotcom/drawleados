@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Combobox } from '../components/ui/combobox';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Textarea } from '../components/ui/textarea';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle, Copy, Megaphone } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye, MessageCircle, Copy, Megaphone, StickyNote } from 'lucide-react';
 import BNICampaignsTab from '../components/bni/BNICampaignsTab';
 import { toast } from 'sonner';
 
@@ -131,8 +131,6 @@ const BNIOutreachPage = () => {
   const [showView, setShowView] = useState(false);
   const [viewEntry, setViewEntry] = useState(null);
   const [viewTab, setViewTab] = useState('details');
-  const [remarksDraft, setRemarksDraft] = useState('');
-  const [remarksSaving, setRemarksSaving] = useState(false);
 
   const [sources, setSources] = useState([]);
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -277,23 +275,104 @@ const BNIOutreachPage = () => {
   const openView = (o) => {
     setViewEntry(o);
     setViewTab('details');
-    setRemarksDraft(o.remarks || '');
+    setRemarkDate(todayISO());
+    setRemarkText('');
     setShowView(true);
   };
-  const saveRemarks = async () => {
-    if (!viewEntry) return;
-    setRemarksSaving(true);
+  // Dated remarks log — the Remarks button beside each name and the View
+  // popup's Remarks tab both work on o.remark_log ([{remark_id, date, text, …}]).
+  // Local calendar date (toISOString would give the UTC date — yesterday before 5:30 AM IST).
+  const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const [remarksFor, setRemarksFor] = useState(null); // outreach_id whose Remarks popup is open
+  const [remarkDate, setRemarkDate] = useState(todayISO());
+  const [remarkText, setRemarkText] = useState('');
+  const [remarkSaving, setRemarkSaving] = useState(false);
+  const patchEntry = (outreachId, fn) => {
+    setOutreach((prev) => prev.map((o) => (o.outreach_id === outreachId ? fn(o) : o)));
+    setViewEntry((v) => (v && v.outreach_id === outreachId ? fn(v) : v));
+  };
+  const openRemarks = (o) => { setRemarksFor(o.outreach_id); setRemarkDate(todayISO()); setRemarkText(''); };
+  const addRemark = async (outreachId) => {
+    if (!remarkText.trim()) { toast.error('Write a remark'); return; }
+    if (!remarkDate) { toast.error('Pick a date'); return; }
+    setRemarkSaving(true);
     try {
-      await api.put(`/bni/outreach/${viewEntry.outreach_id}`, { remarks: remarksDraft });
-      setOutreach((prev) => prev.map((o) => (o.outreach_id === viewEntry.outreach_id ? { ...o, remarks: remarksDraft } : o)));
-      setViewEntry((v) => ({ ...v, remarks: remarksDraft }));
-      toast.success('Remarks saved');
+      const res = await api.post(`/bni/outreach/${outreachId}/remarks`, { date: remarkDate, text: remarkText });
+      patchEntry(outreachId, (o) => ({ ...o, remark_log: [...(o.remark_log || []), res.data] }));
+      setRemarkText('');
+      setRemarkDate(todayISO());
+      toast.success('Remark added');
     } catch (error) {
-      toast.error('Failed to save remarks');
+      toast.error(error.response?.data?.detail || 'Failed to add remark');
     } finally {
-      setRemarksSaving(false);
+      setRemarkSaving(false);
     }
   };
+  const deleteRemark = async (outreachId, remarkId) => {
+    if (!window.confirm('Delete this remark?')) return;
+    try {
+      await api.delete(`/bni/outreach/${outreachId}/remarks/${remarkId}`);
+      patchEntry(outreachId, (o) => ({ ...o, remark_log: (o.remark_log || []).filter((r) => r.remark_id !== remarkId) }));
+    } catch (error) {
+      toast.error('Failed to delete remark');
+    }
+  };
+  // Newest date first; same-day remarks newest-added first.
+  const sortedRemarks = (o) => [...(o?.remark_log || [])].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''));
+  const fmtRemarkDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+
+  // Plain render-function (not a component) so the textarea keeps focus while typing.
+  const remarksPanel = (o) => {
+    const list = sortedRemarks(o);
+    return (
+      <div className="space-y-4">
+        <div className={`rounded-lg border ${borderColor} p-3 space-y-2`}>
+          <div className="flex items-center gap-2">
+            <Label className={`${textPrimary} shrink-0`}>Date</Label>
+            <Input type="date" value={remarkDate} onChange={(e) => setRemarkDate(e.target.value)} className={`w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-remark-date" />
+          </div>
+          <Textarea
+            value={remarkText}
+            onChange={(e) => setRemarkText(e.target.value)}
+            rows={4}
+            placeholder="Summary — what was discussed, next steps…"
+            className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+            data-testid="bni-remark-text"
+          />
+          <div className="flex justify-end">
+            <Button onClick={() => addRemark(o.outreach_id)} disabled={remarkSaving || !remarkText.trim()} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-remark-add">
+              <Plus className="h-4 w-4 mr-1" /> {remarkSaving ? 'Saving…' : 'Add Remark'}
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+          {list.length === 0 && !o.remarks && <p className={`text-sm text-center py-4 ${textSecondary}`}>No remarks yet.</p>}
+          {list.map((r) => (
+            <div key={r.remark_id} className={`rounded-lg border ${borderColor} p-3`} data-testid={`bni-remark-${r.remark_id}`}>
+              <div className="flex items-center justify-between gap-2">
+                <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40">{fmtRemarkDate(r.date)}</Badge>
+                <div className="flex items-center gap-1">
+                  {r.created_by_name && <span className={`text-[11px] ${textSecondary}`}>{r.created_by_name}</span>}
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#ef4444]" onClick={() => deleteRemark(o.outreach_id, r.remark_id)} title="Delete remark">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <p className={`text-sm mt-2 whitespace-pre-wrap ${textPrimary}`}>{r.text}</p>
+            </div>
+          ))}
+          {o.remarks && (
+            <div className={`rounded-lg border border-dashed ${borderColor} p-3`}>
+              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Earlier note</p>
+              <p className={`text-sm mt-1 whitespace-pre-wrap ${textPrimary}`}>{o.remarks}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+  const remarksEntry = remarksFor ? outreach.find((o) => o.outreach_id === remarksFor) : null;
+
   const save = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
     setSaving(true);
@@ -711,7 +790,17 @@ const BNIOutreachPage = () => {
                     <div key={o.outreach_id} className={`p-4 hover:${bgSecondary} transition-colors`} data-testid={`bni-outreach-row-${o.outreach_id}`}>
                       {/* Line 1: member name + status */}
                       <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <p className={`font-semibold ${textPrimary}`} data-testid={`bni-outreach-name-${o.outreach_id}`}>{o.name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`font-semibold ${textPrimary}`} data-testid={`bni-outreach-name-${o.outreach_id}`}>{o.name}</p>
+                          <Button
+                            variant="outline" size="sm"
+                            className="h-7 px-2 text-xs text-[#6366f1] border-[#6366f1]/40"
+                            onClick={() => openRemarks(o)}
+                            data-testid={`bni-outreach-remarks-btn-${o.outreach_id}`}
+                          >
+                            <StickyNote className="h-3.5 w-3.5 mr-1" /> Remarks{(o.remark_log || []).length ? ` (${o.remark_log.length})` : ''}
+                          </Button>
+                        </div>
                         <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
                           <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
                             <SelectValue />
@@ -1069,6 +1158,18 @@ const BNIOutreachPage = () => {
           borderColor={borderColor}
         />
 
+        <Dialog open={!!remarksEntry} onOpenChange={(open) => { if (!open) setRemarksFor(null); }}>
+          <DialogContent className={`${bgCard} max-w-lg`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Remarks — {remarksEntry?.name}</DialogTitle>
+            </DialogHeader>
+            {remarksEntry && remarksPanel(remarksEntry)}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRemarksFor(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={showView} onOpenChange={setShowView}>
           <DialogContent className={`${bgCard} max-w-lg`}>
             <DialogHeader>
@@ -1125,23 +1226,7 @@ const BNIOutreachPage = () => {
                 </div>
               </div>
             )}
-            {viewEntry && viewTab === 'remarks' && (
-              <div className="space-y-3">
-                <Textarea
-                  value={remarksDraft}
-                  onChange={(e) => setRemarksDraft(e.target.value)}
-                  rows={6}
-                  placeholder="Add remarks about this lead…"
-                  className={`${bgSecondary} border ${borderColor}`}
-                  data-testid="bni-outreach-remarks-input"
-                />
-                <div className="flex justify-end">
-                  <Button onClick={saveRemarks} disabled={remarksSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-remarks-save">
-                    {remarksSaving ? 'Saving…' : 'Save Remarks'}
-                  </Button>
-                </div>
-              </div>
-            )}
+            {viewEntry && viewTab === 'remarks' && remarksPanel(viewEntry)}
             {viewEntry && viewTab === 'whatsapp' && (() => {
               const viewCategory = categories.find((c) => c.category_id === viewEntry.category_id);
               const liveTemplate = (viewCategory?.templates || []).find((t) => t.is_live);
@@ -1342,7 +1427,8 @@ function CategoryTemplatesModal({ category, onClose, onChanged, bgCard, bgSecond
   const addTextareaRef = useRef(null);
   const editTextareaRef = useRef(null);
 
-  const todayISO = () => new Date().toISOString().slice(0, 10);
+  // Local calendar date (toISOString would give the UTC date — yesterday before 5:30 AM IST).
+  const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
   const loadPerf = useCallback(async () => {
     setPerfLoading(true);

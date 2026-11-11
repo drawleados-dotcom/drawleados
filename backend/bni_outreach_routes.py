@@ -398,6 +398,56 @@ async def delete_outreach(outreach_id: str, request: Request):
     return {"success": True}
 
 
+# ---------- Dated remarks log — any number of (date, summary) notes per
+# member, kept in `remark_log` alongside the older single `remarks` field. ----------
+
+class RemarkCreate(BaseModel):
+    date: str   # YYYY-MM-DD — the day the conversation/meeting happened
+    text: str
+
+
+@bni_outreach_router.post("/{outreach_id}/remarks")
+async def add_remark(outreach_id: str, payload: RemarkCreate, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Write a remark")
+    try:
+        datetime.strptime(payload.date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Pick a valid date")
+    now = datetime.now(timezone.utc).isoformat()
+    remark = {
+        "remark_id": f"bnirmk_{uuid.uuid4().hex[:10]}",
+        "date": payload.date,
+        "text": text,
+        "created_by": user.user_id,
+        "created_by_name": getattr(user, "name", "") or "",
+        "created_at": now,
+    }
+    result = await db.bni_outreach.update_one(
+        {"outreach_id": outreach_id},
+        {"$push": {"remark_log": remark}, "$set": {"updated_at": now}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Outreach entry not found")
+    return remark
+
+
+@bni_outreach_router.delete("/{outreach_id}/remarks/{remark_id}")
+async def delete_remark(outreach_id: str, remark_id: str, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    result = await db.bni_outreach.update_one(
+        {"outreach_id": outreach_id, "remark_log.remark_id": remark_id},
+        {"$pull": {"remark_log": {"remark_id": remark_id}}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Remark not found")
+    return {"success": True}
+
+
 # ---------- Reach Out (WhatsApp) — sends the entry's category's live
 # template, with the entry's name filled in, and records which template it
 # was so template performance can be compared afterward. ----------
