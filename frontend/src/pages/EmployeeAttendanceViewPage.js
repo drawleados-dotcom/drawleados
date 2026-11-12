@@ -103,11 +103,15 @@ export default function EmployeeAttendanceViewPage() {
       const isWfh = r.work_location === 'home' || r.work_mode === 'wfh';
       const checkedOut = r.clock_out || r.clock_out_time;
       const checkedIn = r.clock_in || r.clock_in_time;
-      if (isLeave) leave++;
-      else if (checkedIn) {
+      // No clock-in means Absent even on an approved leave; On Leave counts
+      // how many of those absences were covered by an approved leave.
+      if (checkedIn) {
         if (isWfh) wfh++;
         else present++;
-      } else absent++;
+      } else {
+        absent++;
+        if (isLeave) leave++;
+      }
 
       if (checkedIn && checkedOut) {
         const h = (new Date(checkedOut) - new Date(checkedIn)) / 3600000;
@@ -239,7 +243,7 @@ export default function EmployeeAttendanceViewPage() {
                       let hours = '-';
                       if (r.total_hours != null) hours = `${Number(r.total_hours).toFixed(1)}h`;
                       else if (ci && co) hours = `${((new Date(co) - new Date(ci)) / 3600000).toFixed(1)}h`;
-                      const status = isLeave ? r.leave_type : isWfh ? 'wfh' : co ? 'present' : ci ? 'working' : 'absent';
+                      const status = !ci ? 'absent' : isWfh ? 'wfh' : co ? 'present' : 'working';
                       const cls = STATUS_COLORS[status] || 'bg-[#71717a]/20 text-[#71717a]';
                       const hasHistory = Array.isArray(r.edit_history) && r.edit_history.length > 0;
                       return (
@@ -260,7 +264,12 @@ export default function EmployeeAttendanceViewPage() {
                               <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5 text-[#6366f1]" /> Office</span>
                             )}
                           </td>
-                          <td className="px-3 py-2"><Badge className={cls}>{status}</Badge></td>
+                          <td className="px-3 py-2">
+                            <Badge className={cls}>{status}</Badge>
+                            {isLeave && !ci && (
+                              <span className="ml-2 text-xs text-[#f59e0b]">{r.leave_type} leave</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2">
                             {r.last_edited_by_name && (
                               <button

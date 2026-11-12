@@ -1010,12 +1010,10 @@ async def get_employee_attendance(
                 "clock_in": None,
                 "clock_out": None,
                 "is_auto_filled": True,
+                "status": "absent",
             }
             if day in leave_by_day:
                 row["leave_type"] = leave_by_day[day]
-                row["status"] = "leave"
-            else:
-                row["status"] = "absent"
             records.append(row)
         day += timedelta(days=1)
 
