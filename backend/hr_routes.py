@@ -1130,7 +1130,8 @@ async def get_attendance_history(
     sick_used = len([l for l in leaves if l.get("leave_type") == "sick"])
 
     # Every past working day without a clock-in, approved leave included.
-    total_absent = len(await _absent_workdays(user.user_id, target_year, target_month, records))
+    absent_workdays = await _absent_workdays(user.user_id, target_year, target_month, records)
+    total_absent = len(absent_workdays)
     
     total_hours = sum(r.get("total_hours", 0) for r in records)
     extra_hours = sum(r.get("extra_hours", 0) for r in records)
@@ -1143,6 +1144,10 @@ async def get_attendance_history(
     
     return {
         "records": records,
+        "absent_days": [
+            {"date": d.strftime("%Y-%m-%d"), "leave_type": lt}
+            for d, lt in sorted(absent_workdays.items(), reverse=True)
+        ],
         "leaves": leaves,
         "permissions": permissions,
         "calendar": {

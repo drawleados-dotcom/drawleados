@@ -616,6 +616,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [monthlyStats, setMonthlyStats] = useState(null);
   const [filteredHistory, setFilteredHistory] = useState([]);
+  const [absentDays, setAbsentDays] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   
@@ -638,6 +639,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           { headers }
         );
         setFilteredHistory(res.data.records || []);
+        setAbsentDays(res.data.absent_days || []);
         setMonthlyStats(res.data.summary || {});
         setLeaveBalance(res.data.leave_balance || {});
       } catch (error) {
@@ -798,6 +800,16 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   
   // Final balance: Total worked - Expected + Extra - Permission
   const finalBalance = totalWorkedHours - expectedMonthlyHours;
+
+  // Table rows: attendance records plus a row for each absent day that has
+  // no record (a missed day has nothing stored). Kept out of the hour totals.
+  const absentByDate = Object.fromEntries(absentDays.map(a => [a.date, a]));
+  const recordDateKey = (r) => (typeof r.date === 'string' ? r.date.slice(0, 10) : new Date(r.date).toISOString().slice(0, 10));
+  const recordedDates = new Set(filteredHistory.map(recordDateKey));
+  const historyRows = [
+    ...filteredHistory,
+    ...absentDays.filter(a => !recordedDates.has(a.date)).map(a => ({ date: a.date, leave_type: a.leave_type, isAbsentRow: true })),
+  ].sort((a, b) => recordDateKey(b).localeCompare(recordDateKey(a)));
   const isPositiveBalance = finalBalance >= 0;
 
   // State for day detail popup
@@ -1057,9 +1069,26 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 </tr>
               </thead>
               <tbody>
-                {filteredHistory.map((record, index) => {
+                {historyRows.map((record, index) => {
                   const recordDate = new Date(record.date);
                   const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
+                  const absentInfo = absentByDate[recordDateKey(record)];
+                  if (record.isAbsentRow || (absentInfo && !record.clock_in && !record.sessions?.length)) {
+                    const leaveType = record.leave_type || absentInfo?.leave_type;
+                    return (
+                      <tr key={index} className={`border-b ${borderColor}`} data-testid={`history-absent-${recordDateKey(record)}`}>
+                        <td className={`p-3 ${textPrimary} font-medium`}>{formatDate(record.date)}</td>
+                        <td className={`p-3 ${textSecondary}`}>{dayName}</td>
+                        {Array.from({ length: 7 }).map((_, i) => (
+                          <td key={i} className={`p-3 ${textSecondary}`}>-</td>
+                        ))}
+                        <td className="p-3"><Badge className="bg-red-500/20 text-red-400">Absent</Badge></td>
+                        <td className={`p-3 text-sm ${leaveType ? 'text-[#f59e0b]' : textSecondary}`}>
+                          {leaveType ? `${leaveType.charAt(0).toUpperCase()}${leaveType.slice(1)} leave` : 'No clock-in'}
+                        </td>
+                      </tr>
+                    );
+                  }
                   const sessionsCount = record.sessions?.length || (record.clock_in ? 1 : 0);
                   const lunchDiff = getLunchDiff(record.lunch_duration);
                   const { firstLogin: recordFirstLogin, lastLogout: recordLastLogout } = getDayLoginLogout(record);
@@ -1143,7 +1172,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                     </tr>
                   );
                 })}
-                {filteredHistory.length === 0 && (
+                {historyRows.length === 0 && (
                   <tr>
                     <td colSpan={11} className={`p-8 text-center ${textSecondary}`}>
                       No attendance records found for {monthNames[selectedMonth - 1]} {selectedYear}
