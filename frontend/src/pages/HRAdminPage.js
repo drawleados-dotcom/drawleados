@@ -6728,7 +6728,11 @@ function EnhancedAttendanceTab({
         checkOut,
         totalLoginHours,
         workedHours,
-        workLocation: record?.work_location || record?.work_mode || 'office',
+        // Clock-in defaults work_location to 'office', so an employee whose
+        // profile Work Mode is Remote must win over that default.
+        workLocation: emp.profile?.work_mode === 'remote'
+          ? 'remote'
+          : (record?.work_location || record?.work_mode || 'office'),
         breaks: record?.breaks || [],
         record,
       };

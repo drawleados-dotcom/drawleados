@@ -96,11 +96,15 @@ export default function EmployeeAttendanceViewPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Clock-in defaults work_location to 'office'; a profile Work Mode of
+  // Remote overrides that default.
+  const isRemoteEmployee = employee?.profile?.work_mode === 'remote';
+
   const stats = useMemo(() => {
     let present = 0, absent = 0, wfh = 0, leave = 0, totalH = 0;
     for (const r of records) {
       const isLeave = !!r.leave_type;
-      const isWfh = r.work_location === 'home' || r.work_mode === 'wfh';
+      const isWfh = isRemoteEmployee || r.work_location === 'home' || r.work_mode === 'wfh';
       const checkedOut = r.clock_out || r.clock_out_time;
       const checkedIn = r.clock_in || r.clock_in_time;
       // No clock-in means Absent even on an approved leave; On Leave counts
@@ -119,7 +123,7 @@ export default function EmployeeAttendanceViewPage() {
       } else if (r.total_hours) totalH += Number(r.total_hours) || 0;
     }
     return { present, absent, wfh, leave, totalH };
-  }, [records]);
+  }, [records, isRemoteEmployee]);
 
   const shiftMonth = (delta) => {
     let m = month + delta, y = year;
@@ -238,7 +242,7 @@ export default function EmployeeAttendanceViewPage() {
                     {records.map((r, i) => {
                       const ci = r.clock_in || r.clock_in_time;
                       const co = r.clock_out || r.clock_out_time;
-                      const isWfh = r.work_location === 'home' || r.work_mode === 'wfh';
+                      const isWfh = isRemoteEmployee || r.work_location === 'home' || r.work_mode === 'wfh';
                       const isLeave = !!r.leave_type;
                       let hours = '-';
                       if (r.total_hours != null) hours = `${Number(r.total_hours).toFixed(1)}h`;
@@ -256,10 +260,10 @@ export default function EmployeeAttendanceViewPage() {
                           </td>
                           <td className={`px-3 py-2 ${textPrimary} font-medium`}>{hours}</td>
                           <td className={`px-3 py-2 ${textSecondary}`}>
-                            {isWfh ? (
-                              <span className="inline-flex items-center gap-1"><Home className="h-3.5 w-3.5 text-[#10b981]" /> WFH</span>
-                            ) : !ci ? (
+                            {!ci ? (
                               '-'
+                            ) : isWfh ? (
+                              <span className="inline-flex items-center gap-1"><Home className="h-3.5 w-3.5 text-[#10b981]" /> WFH</span>
                             ) : (
                               <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5 text-[#6366f1]" /> Office</span>
                             )}
