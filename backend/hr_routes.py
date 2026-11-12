@@ -958,23 +958,54 @@ async def get_employee_attendance(
     ).sort("date", -1).to_list(200)
 
     # Working days with no attendance record at all are filled in, so a day
-    # the employee never clocked in shows as Absent (or On Leave when an
-    # approved leave covers it) instead of silently missing. Working days
-    # follow the same rule as the attendance trend: Sundays and declared
-    # holidays are off unless marked a special working day.
-    def _to_date(v):
-        if not v:
-            return None
-        if isinstance(v, datetime):
-            return v.date()
-        try:
-            return datetime.fromisoformat(str(v).replace("Z", "+00:00")[:10]).date()
-        except ValueError:
-            return None
-
+    # the employee never clocked in shows as Absent instead of silently missing.
     recorded_days = {_to_date(r.get("date")) for r in records}
+    absent_days = await _absent_workdays(user_id, y, m, records)
+    for day, leave_type in absent_days.items():
+        if day in recorded_days:
+            continue
+        row = {
+            "user_id": user_id,
+            "date": datetime(day.year, day.month, day.day, tzinfo=timezone.utc),
+            "clock_in": None,
+            "clock_out": None,
+            "is_auto_filled": True,
+            "status": "absent",
+        }
+        if leave_type:
+            row["leave_type"] = leave_type
+        records.append(row)
 
-    calendar = await db.hr_calendar.find_one({"month": m, "year": y}, {"_id": 0}) or {}
+    records.sort(key=lambda r: _to_date(r.get("date")) or datetime.min.date(), reverse=True)
+    return records
+
+
+def _to_date(v):
+    """Attendance/leave/profile dates are stored as datetimes or ISO strings."""
+    if not v:
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")[:10]).date()
+    except ValueError:
+        return None
+
+
+async def _absent_workdays(user_id: str, year: int, month: int, records: list) -> Dict[Any, Optional[str]]:
+    """Past working days in the month on which the employee never clocked in,
+    mapped to the approved leave type covering that day (None if no leave) —
+    an approved leave still counts as Absent. Saturdays, Sundays and declared
+    holidays are off unless marked a special working day; today is excluded since the
+    employee may still clock in; days outside joining/relieving are skipped."""
+    start = datetime(year, month, 1).date()
+    end = datetime(year + 1, 1, 1).date() if month == 12 else datetime(year, month + 1, 1).date()
+
+    clocked_in_days = {
+        _to_date(r.get("date")) for r in records if r.get("clock_in") or r.get("clock_in_time")
+    }
+
+    calendar = await db.hr_calendar.find_one({"month": month, "year": year}, {"_id": 0}) or {}
     holidays = {h.get("date") for h in (calendar.get("holidays") or []) if h.get("date")}
     special_working_days = set(calendar.get("special_working_days") or [])
 
@@ -995,33 +1026,22 @@ async def get_employee_attendance(
         while d <= (le or ls):
             leave_by_day.setdefault(d, lv.get("leave_type") or "leave")
             d += timedelta(days=1)
+    for r in records:
+        d = _to_date(r.get("date"))
+        if d and r.get("leave_type"):
+            leave_by_day.setdefault(d, r["leave_type"])
 
-    # Today is excluded — the employee may still clock in later in the day.
-    today = now.date()
-    day = start.date()
-    while day < end.date() and day < today:
+    today = datetime.now(timezone.utc).date()
+    absent = {}
+    day = start
+    while day < end and day < today:
         key = day.strftime("%Y-%m-%d")
-        is_off = key in holidays or (day.weekday() == 6 and key not in special_working_days)
+        is_off = key in holidays or (day.weekday() >= 5 and key not in special_working_days)
         outside_employment = (joined_on and day < joined_on) or (relieved_on and day > relieved_on)
-        if day not in recorded_days and not is_off and not outside_employment:
-            row = {
-                "user_id": user_id,
-                "date": datetime(day.year, day.month, day.day, tzinfo=timezone.utc),
-                "clock_in": None,
-                "clock_out": None,
-                "is_auto_filled": True,
-                "status": "absent",
-            }
-            if day in leave_by_day:
-                row["leave_type"] = leave_by_day[day]
-            records.append(row)
+        if not is_off and not outside_employment and day not in clocked_in_days:
+            absent[day] = leave_by_day.get(day)
         day += timedelta(days=1)
-
-    def _sort_key(r):
-        return _to_date(r.get("date")) or datetime.min.date()
-
-    records.sort(key=_sort_key, reverse=True)
-    return records
+    return absent
 
 
 
@@ -1108,14 +1128,9 @@ async def get_attendance_history(
     # Count leaves by type
     casual_used = len([l for l in leaves if l.get("leave_type") == "casual"])
     sick_used = len([l for l in leaves if l.get("leave_type") == "sick"])
-    unpaid_used = len([l for l in leaves if l.get("leave_type") == "unpaid"])
-    
-    # Total Absent should ONLY count actual absences:
-    # 1. Unpaid leaves (extra leaves beyond allocation)
-    # 2. Days explicitly marked as "absent" in attendance records
-    # NOT pending/future working days
-    actual_absent_records = len([r for r in records if r.get("status") == "absent"])
-    total_absent = actual_absent_records + unpaid_used
+
+    # Every past working day without a clock-in, approved leave included.
+    total_absent = len(await _absent_workdays(user.user_id, target_year, target_month, records))
     
     total_hours = sum(r.get("total_hours", 0) for r in records)
     extra_hours = sum(r.get("extra_hours", 0) for r in records)
@@ -1139,7 +1154,7 @@ async def get_attendance_history(
         "summary": {
             "total_working_days": total_working_days,
             "present": present_days,
-            "absent": total_absent,  # Only actual absences (unpaid/extra leaves, marked absent)
+            "absent": total_absent,
             "casual_leave": casual_used,
             "sick_leave": sick_used,
             "monthly_casual_allocation": monthly_casual_allocation,
