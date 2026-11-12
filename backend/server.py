@@ -675,7 +675,14 @@ async def get_current_user(request: Request) -> User:
     
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
-    
+
+    # Deactivated/relieved employees lose access immediately, even on a
+    # session created before they were deactivated — both fields are
+    # checked since some employees were relieved before is_active was
+    # synced to status (see /auth/login and /users/basic).
+    if user_doc.get("is_active") is False or user_doc.get("status") == "inactive":
+        raise HTTPException(status_code=401, detail="Your account has been deactivated. Please contact HR/Admin.")
+
     # Convert datetime strings to datetime objects if present
     if user_doc.get('created_at'):
         if isinstance(user_doc['created_at'], str):
@@ -829,7 +836,14 @@ async def login(credentials: UserLogin):
     
     if not password_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
+    # Block login for deactivated/relieved employees. Some employees were
+    # relieved before is_active was synced to status, so both are checked
+    # (mirrors the convention in GET /users/basic).
+    if user_doc.get("is_active") is False or user_doc.get("status") == "inactive":
+        logging.info(f"Login blocked for inactive user: {credentials.email}")
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact HR/Admin.")
+
     # Check if 2FA is enabled
     if user_doc.get("two_factor_enabled"):
         return {
@@ -1128,7 +1142,10 @@ async def verify_2fa_login(email: str, code: str):
     
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
+    if user_doc.get("is_active") is False or user_doc.get("status") == "inactive":
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact HR/Admin.")
+
     if not user_doc.get("two_factor_enabled"):
         raise HTTPException(status_code=400, detail="2FA is not enabled for this user")
     
@@ -1170,7 +1187,10 @@ async def google_session(session_id: str, response: Response):
     
     # Check if user exists
     user_doc = await db.users.find_one({"email": data["email"]}, {"_id": 0})
-    
+
+    if user_doc and (user_doc.get("is_active") is False or user_doc.get("status") == "inactive"):
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact HR/Admin.")
+
     if user_doc:
         user_id = user_doc["user_id"]
         # Update user data
