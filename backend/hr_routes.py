@@ -956,6 +956,73 @@ async def get_employee_attendance(
         {"user_id": user_id, "date": {"$gte": start, "$lt": end}},
         {"_id": 0},
     ).sort("date", -1).to_list(200)
+
+    # Working days with no attendance record at all are filled in, so a day
+    # the employee never clocked in shows as Absent (or On Leave when an
+    # approved leave covers it) instead of silently missing. Working days
+    # follow the same rule as the attendance trend: Sundays and declared
+    # holidays are off unless marked a special working day.
+    def _to_date(v):
+        if not v:
+            return None
+        if isinstance(v, datetime):
+            return v.date()
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")[:10]).date()
+        except ValueError:
+            return None
+
+    recorded_days = {_to_date(r.get("date")) for r in records}
+
+    calendar = await db.hr_calendar.find_one({"month": m, "year": y}, {"_id": 0}) or {}
+    holidays = {h.get("date") for h in (calendar.get("holidays") or []) if h.get("date")}
+    special_working_days = set(calendar.get("special_working_days") or [])
+
+    profile = await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    joined_on = _to_date(profile.get("joining_date"))
+    relieved_on = _to_date(profile.get("relieving_date")) if profile.get("status") == "inactive" else None
+
+    leave_by_day = {}
+    leaves = await db.leave_requests.find(
+        {"user_id": user_id, "status": "approved"},
+        {"_id": 0, "leave_type": 1, "start_date": 1, "end_date": 1},
+    ).to_list(1000)
+    for lv in leaves:
+        ls, le = _to_date(lv.get("start_date")), _to_date(lv.get("end_date"))
+        if not ls:
+            continue
+        d = ls
+        while d <= (le or ls):
+            leave_by_day.setdefault(d, lv.get("leave_type") or "leave")
+            d += timedelta(days=1)
+
+    # Today is excluded — the employee may still clock in later in the day.
+    today = now.date()
+    day = start.date()
+    while day < end.date() and day < today:
+        key = day.strftime("%Y-%m-%d")
+        is_off = key in holidays or (day.weekday() == 6 and key not in special_working_days)
+        outside_employment = (joined_on and day < joined_on) or (relieved_on and day > relieved_on)
+        if day not in recorded_days and not is_off and not outside_employment:
+            row = {
+                "user_id": user_id,
+                "date": datetime(day.year, day.month, day.day, tzinfo=timezone.utc),
+                "clock_in": None,
+                "clock_out": None,
+                "is_auto_filled": True,
+            }
+            if day in leave_by_day:
+                row["leave_type"] = leave_by_day[day]
+                row["status"] = "leave"
+            else:
+                row["status"] = "absent"
+            records.append(row)
+        day += timedelta(days=1)
+
+    def _sort_key(r):
+        return _to_date(r.get("date")) or datetime.min.date()
+
+    records.sort(key=_sort_key, reverse=True)
     return records
 
 

@@ -254,6 +254,8 @@ export default function EmployeeAttendanceViewPage() {
                           <td className={`px-3 py-2 ${textSecondary}`}>
                             {isWfh ? (
                               <span className="inline-flex items-center gap-1"><Home className="h-3.5 w-3.5 text-[#10b981]" /> WFH</span>
+                            ) : !ci ? (
+                              '-'
                             ) : (
                               <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5 text-[#6366f1]" /> Office</span>
                             )}
