@@ -188,13 +188,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   
   // Advanced filters
   const [filters, setFilters] = useState({
-    dateFilter: 'all', // all, today, range - default to all
+    dateFilter: 'today', // all, today, range - defaults to Today for both My Tasks and Assign to Team, so the list opens on what's due now
     dateFrom: '',
     dateTo: '',
     assignedTo: 'all', // all, myself, or user_id
     assignedBy: 'all', // all or user_id
     taskType: 'all', // all, general, meeting, follow_up, proposal, call
-    status: 'pending', // all, pending, in_progress, completed, on_hold — defaults to Pending for both My Tasks and Assign to Team, so the list opens on what still needs doing
+    status: 'all', // all, pending, in_progress, completed, on_hold — defaults to All Status for both My Tasks and Assign to Team
     singleDate: '', // for single date filter
     department: 'all', // all or dept_key
     subDepartment: 'all', // all or sub_department id (only meaningful once a specific department is selected)
@@ -1873,14 +1873,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Reset filters
   const resetFilters = () => {
     setFilters({
-      dateFilter: 'all',
+      dateFilter: 'today',
       dateFrom: '',
       dateTo: '',
       singleDate: '',
       assignedTo: 'all',
       assignedBy: 'all',
       taskType: 'all',
-      status: 'pending',
+      status: 'all',
       department: 'all',
       subDepartment: 'all',
       project: 'all',
