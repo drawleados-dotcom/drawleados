@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { X, FileSpreadsheet, Link2, RefreshCw, ExternalLink, Trash2, Pencil, Plus, Check, AlertCircle } from 'lucide-react';
@@ -51,17 +51,25 @@ export default function SheetConnectModal({
 
   const label = sheetType === 'prospect' ? 'Prospect Sheet' : 'Lead Sheet';
 
+  // The parent builds `headers` as a fresh object every render. Reading it
+  // through a ref keeps refreshStatus stable — otherwise every parent
+  // re-render (stages panel typing, leads/stats finishing loading) re-ran the
+  // open-reset effect below and wiped a half-filled "Add New Sheet" form.
+  const headersRef = useRef(headers);
+  headersRef.current = headers;
+
   const refreshStatus = useCallback(async () => {
     try {
       const [s, c] = await Promise.all([
-        axios.get(`${API}/api/sheets/status`, { headers }),
-        axios.get(`${API}/api/sheets/configs`, { headers }),
+        axios.get(`${API}/api/sheets/status`, { headers: headersRef.current }),
+        axios.get(`${API}/api/sheets/configs`, { headers: headersRef.current }),
       ]);
       setOauthConnected(!!s.data?.connected);
       setConfigs(c.data?.[sheetType] || []);
     } catch { /* ignore */ }
-  }, [headers, sheetType]);
+  }, [sheetType]);
 
+  // Reset only when the modal opens, never while it's open.
   useEffect(() => {
     if (!open) return;
     refreshStatus();
