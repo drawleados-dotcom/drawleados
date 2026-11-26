@@ -15,8 +15,12 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+import logging
 
 sheets_router = APIRouter(tags=["google-sheets"])
+logger = logging.getLogger(__name__)
 
 # OAuth config — read from MongoDB first (admin-managed via Settings UI),
 # fall back to env vars for back-compat. Cached briefly to avoid hammering Mongo.
@@ -364,12 +368,14 @@ class SheetConfig(BaseModel):
     name: Optional[str] = ""
     sheet_url: str
     source_type: Optional[str] = "website"  # meta | whatsapp | website | walk_in | referral | link | other
+    tabs: Optional[List[str]] = None  # worksheet titles to sync; empty = the first tab (pre-tab-picker behaviour)
 
 
 class SheetConfigUpdate(BaseModel):
     name: Optional[str] = None
     sheet_url: Optional[str] = None
     source_type: Optional[str] = None
+    tabs: Optional[List[str]] = None
 
 
 async def _backfill_config_id(db, doc: dict) -> dict:
@@ -432,6 +438,7 @@ async def save_config(payload: SheetConfig, request: Request):
         "sheet_url": payload.sheet_url,
         "sheet_id": sheet_id,
         "source_type": payload.source_type or "website",
+        "tabs": [t for t in (payload.tabs or []) if t],
         "last_synced_at": None,
         "last_synced_count": 0,
         "created_at": now,
@@ -460,6 +467,8 @@ async def update_config(config_id: str, payload: SheetConfigUpdate, request: Req
         updates["sheet_id"] = sheet_id
     if payload.source_type is not None:
         updates["source_type"] = payload.source_type
+    if payload.tabs is not None:
+        updates["tabs"] = [t for t in payload.tabs if t]
     await db.leads_sheet_configs.update_one({"config_id": config_id}, {"$set": updates})
     return await db.leads_sheet_configs.find_one({"config_id": config_id}, {"_id": 0})
 
@@ -476,18 +485,207 @@ async def delete_config(config_id: str, request: Request):
 
 
 # ---------- Read sheet & preview / sync ----------
-# Was capped at "A1:Z200" — any row appended past row 200 (e.g. a Meta Lead
-# Ads sheet that keeps growing) silently never synced, and any column past Z
-# (26) was invisible to _col()'s header lookups. Widened generously; the
-# Sheets API only returns cells that actually have data, so an oversized
-# range costs nothing extra.
-def _read_sheet_rows(creds: Credentials, sheet_id: str, range_: str = "A1:ZZ50000"):
+# Every read goes through spreadsheets.get (tab list + each tab's real grid
+# size) and then values.batchGet with ranges sized to each tab exactly —
+# no oversized "A1:ZZ50000" guess, and any tab can be read, not just the
+# first one.
+
+def _col_letter(n: int) -> str:
+    s = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s or "A"
+
+
+def _quote_tab(title: str) -> str:
+    return "'" + title.replace("'", "''") + "'"
+
+
+def _read_workbook(creds: Credentials, sheet_id: str, titles: Optional[List[str]] = None):
+    """Returns (spreadsheet_title, tabs, values_by_title). `titles` = which
+    tabs to read values for (None = all of them; [] = none)."""
     service = build("sheets", "v4", credentials=creds, cache_discovery=False)
-    result = service.spreadsheets().values().get(
+    meta = service.spreadsheets().get(
         spreadsheetId=sheet_id,
-        range=range_,
+        fields="properties.title,sheets.properties(sheetId,title,index,hidden,gridProperties(rowCount,columnCount))",
     ).execute()
-    return result.get("values", [])
+    tabs = []
+    for sh in meta.get("sheets", []):
+        pr = sh.get("properties", {})
+        grid = pr.get("gridProperties", {}) or {}
+        tabs.append({
+            "title": pr.get("title", ""),
+            "gid": pr.get("sheetId"),
+            "index": pr.get("index", 0),
+            "hidden": bool(pr.get("hidden")),
+            "rows": int(grid.get("rowCount") or 0),
+            "cols": int(grid.get("columnCount") or 0),
+        })
+    tabs.sort(key=lambda t: t["index"])
+    wanted = [t for t in tabs if (titles is None or t["title"] in titles) and t["rows"] and t["cols"]]
+    values = {}
+    if wanted:
+        ranges = [f"{_quote_tab(t['title'])}!A1:{_col_letter(t['cols'])}{t['rows']}" for t in wanted]
+        res = service.spreadsheets().values().batchGet(spreadsheetId=sheet_id, ranges=ranges).execute()
+        for t, vr in zip(wanted, res.get("valueRanges", [])):
+            values[t["title"]] = vr.get("values", [])
+    return (meta.get("properties", {}) or {}).get("title", ""), tabs, values
+
+
+async def _account_email(db, user_id: str, creds: Optional[Credentials] = None) -> str:
+    """Which Google account the stored token belongs to (looked up once via
+    the userinfo endpoint, then cached on the token doc)."""
+    tok = await db.google_sheets_tokens.find_one({"user_id": user_id}, {"_id": 0, "email": 1, "access_token": 1})
+    if not tok:
+        return ""
+    if tok.get("email"):
+        return tok["email"]
+    try:
+        import httpx
+        token = (creds.token if creds else None) or tok.get("access_token")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {token}"})
+        email = (r.json() or {}).get("email", "") if r.status_code == 200 else ""
+    except Exception:
+        email = ""
+    if email:
+        await db.google_sheets_tokens.update_one({"user_id": user_id}, {"$set": {"email": email}})
+    return email
+
+
+async def _read_or_explain(db, user_id: str, creds: Credentials, sheet_id: str, titles=None):
+    """_read_workbook, but Google's errors come back as a readable message
+    instead of a bare 500 ("Sync failed" with no reason)."""
+    try:
+        return await asyncio.to_thread(_read_workbook, creds, sheet_id, titles)
+    except HttpError as e:
+        status = getattr(e.resp, "status", 0)
+        if status in (403, 404):
+            email = await _account_email(db, user_id, creds)
+            who = email or "the Google account connected here"
+            raise HTTPException(
+                status_code=400,
+                detail=f"{who} can't open this sheet. In Google Sheets click Share and add {who} as a Viewer — or Disconnect Google and reconnect with the account that owns the sheet.",
+            )
+        reason = ""
+        try:
+            reason = e.error_details if isinstance(e.error_details, str) else ""
+            reason = reason or e._get_reason()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Google Sheets error: {reason or e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Reading Google Sheet %s failed", sheet_id)
+        raise HTTPException(status_code=502, detail=f"Couldn't read the sheet: {e}")
+
+
+# Column names (lower-case) recognised for each lead field. Includes the
+# names Meta Lead Ads / Zapier commonly export under.
+NAME_COLS = ("name", "lead_name", "full name", "full_name", "contact name", "customer name", "client name")
+PHONE_COLS = ("phone", "mobile", "contact", "phone number", "phone_number", "whatsapp number", "contact number", "mobile number")
+EMAIL_COLS = ("email", "email id", "e-mail", "email address", "e mail")
+LOCATION_COLS = ("location", "city", "city/town")
+WEBSITE_COLS = ("website", "site", "url")
+COMPANY_COLS = ("company_name", "company name", "company", "organization", "business_name")
+WHAT_COLS = ("what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do")
+NOTES_COLS = ("notes", "remarks", "comments", "message")
+MAPPED_COLS = set(NAME_COLS + PHONE_COLS + EMAIL_COLS + LOCATION_COLS + WEBSITE_COLS + COMPANY_COLS + WHAT_COLS + NOTES_COLS)
+
+
+def _cell(lower_headers, row, candidates):
+    for c in candidates:
+        if c in lower_headers:
+            idx = lower_headers.index(c)
+            if idx < len(row):
+                return row[idx]
+    return ""
+
+
+def _normalize_phone(p):
+    """Last 10 digits — country-code/formatting agnostic."""
+    digits = "".join(ch for ch in str(p or "") if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+def _row_keys(lower_headers, row):
+    """(email_key, phone_key) used to recognise the same person across sheets."""
+    return str(_cell(lower_headers, row, EMAIL_COLS)).strip().lower(), _normalize_phone(_cell(lower_headers, row, PHONE_COLS))
+
+
+def _is_blank(row) -> bool:
+    # Google Sheets can report rows past the real data as blank-string rows
+    # (any cell that ever held content or formatting) — never turn those
+    # into dummy leads named "—".
+    return not any(str(cell).strip() for cell in row)
+
+
+async def _lead_keys(db, exclude_config_id: Optional[str] = None):
+    """Emails / phones of every live lead (optionally not counting one sheet's
+    own imports) — what "already in leads" is checked against."""
+    query = {"is_deleted": {"$ne": True}}
+    if exclude_config_id:
+        query["imported_from_config_id"] = {"$ne": exclude_config_id}
+    emails, phones = set(), set()
+    async for d in db.leads_v2.find(query, {"_id": 0, "email": 1, "phone": 1}):
+        e = (d.get("email") or "").strip().lower()
+        if e:
+            emails.add(e)
+        p = _normalize_phone(d.get("phone"))
+        if p:
+            phones.add(p)
+    return emails, phones
+
+
+def tab_summary(rows, lead_emails, lead_phones) -> dict:
+    """Counts for one tab: data rows, rows already in Leads (same email or
+    phone), and new rows. Rows with neither email nor phone count as new."""
+    if not rows:
+        return {"total": 0, "new": 0, "existing": 0, "headers": []}
+    headers = [str(h).strip() for h in rows[0]]
+    lower = [h.lower() for h in headers]
+    total = existing = 0
+    for r in rows[1:]:
+        if _is_blank(r):
+            continue
+        total += 1
+        email, phone = _row_keys(lower, r)
+        if (email and email in lead_emails) or (phone and phone in lead_phones):
+            existing += 1
+    return {"total": total, "new": total - existing, "existing": existing, "headers": headers}
+
+
+class InspectRequest(BaseModel):
+    sheet_url: str
+
+
+@sheets_router.post("/sheets/inspect")
+async def inspect_sheet(payload: InspectRequest, request: Request):
+    """Tabs inside a pasted sheet, each with its row count and how many of
+    those rows are new vs already in Leads — powers the tab picker."""
+    from server import db, get_current_user
+    user = await get_current_user(request)
+    sheet_id = _extract_sheet_id(payload.sheet_url)
+    if not sheet_id:
+        raise HTTPException(status_code=400, detail="Could not parse a Google Sheet ID from that URL")
+    creds = await _get_creds(db, user.user_id)
+    title, tabs, values = await _read_or_explain(db, user.user_id, creds, sheet_id)
+    emails, phones = await _lead_keys(db)
+    out = []
+    for t in tabs:
+        summary = tab_summary(values.get(t["title"], []), emails, phones)
+        out.append({"title": t["title"], "gid": t["gid"], "hidden": t["hidden"], **summary})
+    return {"spreadsheet_title": title, "tabs": out}
+
+
+def _config_tabs(cfg: dict, tabs: list) -> list:
+    """Tab titles a config syncs. Configs saved before the tab picker have no
+    `tabs` → the first tab, exactly what the old range-without-a-tab read."""
+    if cfg.get("tabs"):
+        return list(cfg["tabs"])
+    return [tabs[0]["title"]] if tabs else []
 
 
 @sheets_router.get("/sheets/preview/{config_id}")
@@ -498,21 +696,21 @@ async def preview_sheet(config_id: str, request: Request):
     if not cfg:
         raise HTTPException(status_code=404, detail="Sheet not found")
     creds = await _get_creds(db, user.user_id)
-    rows = await asyncio.to_thread(_read_sheet_rows, creds, cfg["sheet_id"])
+    _, tabs, _ = await _read_or_explain(db, user.user_id, creds, cfg["sheet_id"], [])
+    first = _config_tabs(cfg, tabs)[:1]
+    _, _, values = await _read_or_explain(db, user.user_id, creds, cfg["sheet_id"], first)
+    rows = values.get(first[0], []) if first else []
     if not rows:
         return {"headers": [], "rows": [], "total": 0}
-    headers = rows[0]
-    data = rows[1:] if len(rows) > 1 else []
-    return {
-        "headers": headers,
-        "rows": data[-5:],  # last 5 only for the preview
-        "total": len(data),
-    }
+    data = [r for r in rows[1:] if not _is_blank(r)]
+    return {"headers": rows[0], "rows": data[-5:], "total": len(data)}
 
 
 @sheets_router.post("/sheets/sync/{config_id}")
 async def sync_sheet(config_id: str, request: Request):
-    """Read every row from the connected sheet, store snapshot + push into leads_v2 under matching stage."""
+    """Read every selected tab, store a snapshot, and upsert rows into
+    leads_v2 under the matching stage. A row whose email/phone already
+    belongs to a lead from anywhere else is skipped, not duplicated."""
     from server import db, get_current_user
     user = await get_current_user(request)
     cfg = await db.leads_sheet_configs.find_one({"config_id": config_id, "user_id": user.user_id})
@@ -520,159 +718,121 @@ async def sync_sheet(config_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Sheet not found")
     sheet_type = cfg["sheet_type"]
     creds = await _get_creds(db, user.user_id)
-    rows = await asyncio.to_thread(_read_sheet_rows, creds, cfg["sheet_id"])
-    if not rows:
-        return {"synced": 0, "note": "Sheet is empty"}
-    headers_arr = [h.strip() for h in rows[0]]
-    body_rows = rows[1:]
+    _, all_tabs, _ = await _read_or_explain(db, user.user_id, creds, cfg["sheet_id"], [])
+    titles = _config_tabs(cfg, all_tabs)
+    missing = [t for t in titles if t not in {x["title"] for x in all_tabs}]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Tab(s) not found in the sheet anymore: {', '.join(missing)} — edit this sheet and re-pick its tabs.")
+    _, _, values = await _read_or_explain(db, user.user_id, creds, cfg["sheet_id"], titles)
+    # Pre-tab-picker configs keep sheet_tab None so their earlier imports
+    # (which have no sheet_tab) still match by row index.
+    legacy = not cfg.get("tabs")
 
-    # Replace previous snapshot of raw rows for THIS sheet only — scoped by
-    # config_id, not sheet_type, so re-syncing one sheet never wipes another
-    # sheet of the same type.
+    # Replace previous snapshot of raw rows for THIS sheet only.
     await db.leads_sheet_rows.delete_many({"config_id": config_id})
 
-    # Find matching stage_id for this sheet type ('lead' or 'prospect') —
-    # shared across every sheet of that type, same as before.
     stage = await db.lead_stages.find_one(
         {"name": {"$regex": f"^{sheet_type}$", "$options": "i"}, "is_deleted": {"$ne": True}},
         {"_id": 0, "stage_id": 1, "name": 1},
     )
     stage_id = stage.get("stage_id") if stage else ""
 
-    # Build lookups of EXISTING sheet-imported leads so re-syncing UPSERTS
-    # instead of duplicating. Matched in priority order:
-    #   1. sheet_row_index — the row's stable position in the sheet. This is
-    #      the primary key: it's the only one that reliably identifies a
-    #      row that has no name/phone/email at all (common for partially
-    #      -filled Meta Lead Ads rows), which previously always fell through
-    #      to "insert as new" on every single sync.
-    #   2. email (lowercased) — kept for leads imported before this field
-    #      existed, so they don't suddenly duplicate on the next sync.
-    #   3. phone (last 10 digits, country-code/formatting agnostic) — same
-    #      backward-compat reasoning, for phone-only rows from before.
-    # Scoped by config_id (this exact sheet) rather than sheet_type, so a
-    # second sheet of the same type never claims another sheet's leads.
+    # This sheet's own earlier imports are upserted, matched by (tab, row
+    # index). Email/phone matching only covers imports from before row
+    # indexes were stored — otherwise a second row for the same person
+    # would overwrite the first one's lead.
     existing = await db.leads_v2.find(
         {"imported_from_config_id": config_id, "created_by": user.user_id, "is_deleted": {"$ne": True}},
-        {"_id": 0, "lead_id": 1, "email": 1, "phone": 1, "sheet_row_index": 1},
-    ).to_list(10000)
-
-    def _normalize_phone(p):
-        digits = "".join(ch for ch in str(p or "") if ch.isdigit())
-        return digits[-10:] if len(digits) >= 10 else digits
-
-    existing_by_row_index = {e["sheet_row_index"]: e["lead_id"] for e in existing if e.get("sheet_row_index") is not None}
-    existing_by_email = {(e.get("email") or "").strip().lower(): e["lead_id"] for e in existing if e.get("email")}
-    existing_by_phone = {_normalize_phone(e.get("phone")): e["lead_id"] for e in existing if _normalize_phone(e.get("phone"))}
+        {"_id": 0, "lead_id": 1, "email": 1, "phone": 1, "sheet_row_index": 1, "sheet_tab": 1},
+    ).to_list(50000)
+    existing_by_row = {(e.get("sheet_tab"), e["sheet_row_index"]): e["lead_id"] for e in existing if e.get("sheet_row_index") is not None}
+    pre_index = [e for e in existing if e.get("sheet_row_index") is None]
+    existing_by_email = {(e.get("email") or "").strip().lower(): e["lead_id"] for e in pre_index if e.get("email")}
+    existing_by_phone = {_normalize_phone(e.get("phone")): e["lead_id"] for e in pre_index if _normalize_phone(e.get("phone"))}
+    # Leads from anywhere else — rows matching these are skipped.
+    other_emails, other_phones = await _lead_keys(db, exclude_config_id=config_id)
+    # People already taken by an earlier row in this sync (any tab).
+    seen_emails, seen_phones = set(), set()
 
     sheet_docs = []
-    inserted = 0
-    updated = 0
-    lower_headers = [h.lower() for h in headers_arr]
-
-    def _col(row, *candidates):
-        for c in candidates:
-            if c in lower_headers:
-                idx = lower_headers.index(c)
-                if idx < len(row):
-                    return row[idx]
-        return ""
-
+    inserted = updated = skipped_blank = skipped_existing = 0
+    per_tab = []
     now = datetime.now(timezone.utc)
-    skipped_blank = 0
-    for row_index, r in enumerate(body_rows):
-        # Google Sheets' values.get() can report rows past the real data as
-        # blank-string rows instead of omitting them entirely — this happens
-        # whenever any cell in that row has ever held content or formatting
-        # (a common side-effect of automations like Zapier/Make writing Meta
-        # Lead Ads submissions into the sheet, which often pre-format or
-        # touch a wide range of rows/columns). Without this guard, every one
-        # of those blank rows was turned into a dummy lead named "—".
-        if not any(str(cell).strip() for cell in r):
-            skipped_blank += 1
-            continue
-        record = {h: (r[i] if i < len(r) else "") for i, h in enumerate(headers_arr)}
-        row_id = f"row_{uuid.uuid4().hex[:12]}"
-        sheet_docs.append({
-            "row_id": row_id,
-            "user_id": user.user_id,
-            "config_id": config_id,
-            "sheet_type": sheet_type,
-            "source_type": cfg.get("source_type") or "website",
-            "data": record,
-            "imported_at": now,
-        })
-        # Map common column names → lead_v2 fields. Includes the field names
-        # Meta Lead Ads / Zapier commonly export under (full_name, phone_number,
-        # email_address, etc.) — a header that matches none of these still
-        # falls through to a blank field (and the row still gets created,
-        # per the blank-row guard above only skipping fully-empty rows).
-        name = _col(r, "name", "lead_name", "full name", "full_name", "contact name", "customer name", "client name") or "—"
-        phone = _col(r, "phone", "mobile", "contact", "phone number", "phone_number", "whatsapp number", "contact number", "mobile number")
-        email = _col(r, "email", "email id", "e-mail", "email address", "e mail")
-        location = _col(r, "location", "city", "city/town")
-        website = _col(r, "website", "site", "url")
-        company_name = _col(r, "company_name", "company name", "company", "organization", "business_name")
-        what_do_you_do = _col(r, "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do")
-        notes = _col(r, "notes", "remarks", "comments", "message")
-        # Columns mapped to first-class lead fields (so they don't double-up under custom_fields)
-        mapped_cols = {
-            "name", "lead_name", "full name", "full_name", "contact name", "customer name", "client name",
-            "phone", "mobile", "contact", "phone number", "phone_number", "whatsapp number", "contact number", "mobile number",
-            "email", "email id", "e-mail", "email address", "e mail",
-            "location", "city", "city/town",
-            "website", "site", "url",
-            "company_name", "company name", "company", "organization", "business_name",
-            "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do",
-            "notes", "remarks", "comments", "message",
-        }
-        email_key = str(email).strip().lower()
-        phone_key = _normalize_phone(phone)
-        existing_lead_id = (
-            existing_by_row_index.get(row_index)
-            or (existing_by_email.get(email_key) if email_key else None)
-            or (existing_by_phone.get(phone_key) if phone_key else None)
-        )
-        common_fields = {
-            "name": str(name).strip() or "—",
-            "phone": str(phone).strip(),
-            "email": str(email).strip(),
-            "location": str(location).strip(),
-            "website": str(website).strip(),
-            "company_name": str(company_name).strip(),
-            "what_do_you_do": str(what_do_you_do).strip(),
-            "source": cfg.get("source_type") or "website",
-            "lead_owner": user.user_id,
-            "notes": str(notes).strip(),
-            "imported_from_sheet": sheet_type,
-            "imported_from_config_id": config_id,
-            "sheet_row_id": row_id,
-            "sheet_row_index": row_index,
-            "custom_fields": {k: v for k, v in record.items() if k.lower() not in mapped_cols},
-            "updated_at": now,
-            "is_deleted": False,
-        }
-        if existing_lead_id:
-            # UPSERT — preserve stage_id, lead_id, and any manual edits the user made.
-            # Only refresh the synced fields (name/phone/email/location/etc) from the sheet.
-            await db.leads_v2.update_one(
-                {"lead_id": existing_lead_id},
-                {"$set": common_fields}
-            )
-            updated += 1
-        else:
-            # Every row inserted in this sync shares the same `now` — offset
-            # by row_index so leads keep the sheet's row order (later rows =
-            # more recently added) instead of tying and falling back to
-            # undefined Mongo insertion order when sorted newest-first.
-            await db.leads_v2.insert_one({
-                "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
-                "stage_id": stage_id,
-                "created_by": user.user_id,
-                "created_at": now + timedelta(microseconds=row_index),
-                **common_fields,
-            })
-            inserted += 1
+    seq = 0  # keeps sheet order across tabs for created_at
+    for title in titles:
+        rows = values.get(title, [])
+        tab_key = None if legacy else title
+        t_ins = t_upd = t_skip = 0
+        if rows:
+            headers_arr = [str(h).strip() for h in rows[0]]
+            lower_headers = [h.lower() for h in headers_arr]
+            for row_index, r in enumerate(rows[1:]):
+                if _is_blank(r):
+                    skipped_blank += 1
+                    continue
+                seq += 1
+                record = {h: (r[i] if i < len(r) else "") for i, h in enumerate(headers_arr)}
+                row_id = f"row_{uuid.uuid4().hex[:12]}"
+                email_key, phone_key = _row_keys(lower_headers, r)
+                existing_lead_id = (
+                    existing_by_row.get((tab_key, row_index))
+                    or (existing_by_email.get(email_key) if email_key else None)
+                    or (existing_by_phone.get(phone_key) if phone_key else None)
+                )
+                duplicate = not existing_lead_id and bool(
+                    (email_key and (email_key in other_emails or email_key in seen_emails))
+                    or (phone_key and (phone_key in other_phones or phone_key in seen_phones))
+                )
+                sheet_docs.append({
+                    "row_id": row_id, "user_id": user.user_id, "config_id": config_id, "sheet_type": sheet_type,
+                    "sheet_tab": title, "source_type": cfg.get("source_type") or "website",
+                    "data": record, "already_in_leads": bool(duplicate), "imported_at": now,
+                })
+                if duplicate:
+                    skipped_existing += 1
+                    t_skip += 1
+                    continue
+                if email_key:
+                    seen_emails.add(email_key)
+                if phone_key:
+                    seen_phones.add(phone_key)
+                common_fields = {
+                    "name": str(_cell(lower_headers, r, NAME_COLS)).strip() or "—",
+                    "phone": str(_cell(lower_headers, r, PHONE_COLS)).strip(),
+                    "email": str(_cell(lower_headers, r, EMAIL_COLS)).strip(),
+                    "location": str(_cell(lower_headers, r, LOCATION_COLS)).strip(),
+                    "website": str(_cell(lower_headers, r, WEBSITE_COLS)).strip(),
+                    "company_name": str(_cell(lower_headers, r, COMPANY_COLS)).strip(),
+                    "what_do_you_do": str(_cell(lower_headers, r, WHAT_COLS)).strip(),
+                    "source": cfg.get("source_type") or "website",
+                    "lead_owner": user.user_id,
+                    "notes": str(_cell(lower_headers, r, NOTES_COLS)).strip(),
+                    "imported_from_sheet": sheet_type,
+                    "imported_from_config_id": config_id,
+                    "sheet_tab": tab_key,
+                    "sheet_row_id": row_id,
+                    "sheet_row_index": row_index,
+                    "custom_fields": {k: v for k, v in record.items() if k.lower() not in MAPPED_COLS},
+                    "updated_at": now,
+                    "is_deleted": False,
+                }
+                if existing_lead_id:
+                    # UPSERT — keep stage_id, lead_id and manual edits; refresh sheet fields only.
+                    await db.leads_v2.update_one({"lead_id": existing_lead_id}, {"$set": common_fields})
+                    updated += 1
+                    t_upd += 1
+                else:
+                    # Offset by sheet order so newest-first sorting keeps the sheet's row order.
+                    await db.leads_v2.insert_one({
+                        "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+                        "stage_id": stage_id,
+                        "created_by": user.user_id,
+                        "created_at": now + timedelta(microseconds=seq),
+                        **common_fields,
+                    })
+                    inserted += 1
+                    t_ins += 1
+        per_tab.append({"title": title, "inserted": t_ins, "updated": t_upd, "skipped_existing": t_skip})
 
     if sheet_docs:
         await db.leads_sheet_rows.insert_many(sheet_docs)
@@ -680,13 +840,15 @@ async def sync_sheet(config_id: str, request: Request):
     total_synced = inserted + updated
     await db.leads_sheet_configs.update_one(
         {"config_id": config_id},
-        {"$set": {"last_synced_at": now, "last_synced_count": total_synced}},
+        {"$set": {"last_synced_at": now, "last_synced_count": total_synced, "last_skipped_existing": skipped_existing}},
     )
     return {
         "synced": total_synced,
         "inserted": inserted,
         "updated": updated,
         "skipped_blank": skipped_blank,
+        "skipped_existing": skipped_existing,
+        "tabs": per_tab,
         "stage_id": stage_id,
         "stage_matched": bool(stage_id),
         "last_synced_at": now,

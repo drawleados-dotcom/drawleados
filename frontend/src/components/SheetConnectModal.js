@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { X, FileSpreadsheet, Link2, RefreshCw, ExternalLink, Trash2, Pencil, Plus, Check, AlertCircle } from 'lucide-react';
+import { X, FileSpreadsheet, Link2, RefreshCw, ExternalLink, Trash2, Pencil, Plus, Check, AlertCircle, Layers } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -22,6 +22,8 @@ const SOURCE_TYPES = [
 const sourceLabel = (v) => SOURCE_TYPES.find((s) => s.v === v)?.label || v;
 
 const emptyForm = { name: '', sheet_url: '', source_type: 'website' };
+const SHEET_URL_RE = /\/spreadsheets\/d\/[a-zA-Z0-9-_]+/;
+const emptyTabsInfo = { url: '', loading: false, error: '', title: '', tabs: [] };
 
 /**
  * SheetConnectModal — manages every connected sheet of one type (Prospect
@@ -48,6 +50,11 @@ export default function SheetConnectModal({
   const [preview, setPreview] = useState({ headers: [], rows: [], total: 0 });
   const [busy, setBusy] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
+  // Tab picker: the pasted sheet's tabs with new / already-in-leads counts
+  // (POST /sheets/inspect), and which tabs this connection syncs.
+  const [tabsInfo, setTabsInfo] = useState(emptyTabsInfo);
+  const [selectedTabs, setSelectedTabs] = useState([]);
+  const presetTabsRef = useRef(null); // edit mode: the config's saved tabs, applied once they load
 
   const label = sheetType === 'prospect' ? 'Prospect Sheet' : 'Lead Sheet';
 
@@ -77,7 +84,41 @@ export default function SheetConnectModal({
     setEditingConfigId(null);
     setForm(emptyForm);
     setPreview({ headers: [], rows: [], total: 0 });
+    setTabsInfo(emptyTabsInfo);
+    setSelectedTabs([]);
   }, [open, refreshStatus]);
+
+  // Load the pasted sheet's tabs (debounced) whenever the link changes.
+  useEffect(() => {
+    const url = form.sheet_url.trim();
+    if (!formOpen || !oauthConnected || !SHEET_URL_RE.test(url)) {
+      setTabsInfo(emptyTabsInfo);
+      return undefined;
+    }
+    if (tabsInfo.url === url && !tabsInfo.error) return undefined;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setTabsInfo({ ...emptyTabsInfo, url, loading: true });
+      try {
+        const r = await axios.post(`${API}/api/sheets/inspect`, { sheet_url: url }, { headers: headersRef.current });
+        if (cancelled) return;
+        const tabs = r.data?.tabs || [];
+        setTabsInfo({ url, loading: false, error: '', title: r.data?.spreadsheet_title || '', tabs });
+        const titles = tabs.map((x) => x.title);
+        const preset = presetTabsRef.current;
+        presetTabsRef.current = null;
+        if (preset) {
+          // Editing: keep the saved tabs (an older connection with none = its first tab).
+          setSelectedTabs(preset.length ? preset.filter((x) => titles.includes(x)) : titles.slice(0, 1));
+        } else {
+          setSelectedTabs(tabs.filter((x) => x.total > 0 && !x.hidden).map((x) => x.title));
+        }
+      } catch (e) {
+        if (!cancelled) setTabsInfo({ ...emptyTabsInfo, url, error: e.response?.data?.detail || 'Could not read this sheet' });
+      }
+    }, 600);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.sheet_url, formOpen, oauthConnected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // After OAuth completion, listen for url param sheets_connected=1 set by callback redirect
   useEffect(() => {
@@ -122,12 +163,18 @@ export default function SheetConnectModal({
 
   const openAddForm = () => {
     setEditingConfigId(null);
+    presetTabsRef.current = null;
+    setTabsInfo(emptyTabsInfo);
+    setSelectedTabs([]);
     setForm(emptyForm);
     setPreview({ headers: [], rows: [], total: 0 });
     setFormOpen(true);
   };
   const openEditForm = (cfg) => {
     setEditingConfigId(cfg.config_id);
+    presetTabsRef.current = cfg.tabs || [];
+    setTabsInfo(emptyTabsInfo);
+    setSelectedTabs(cfg.tabs || []);
     setForm({ name: cfg.name || '', sheet_url: cfg.sheet_url || '', source_type: cfg.source_type || 'website' });
     setPreview({ headers: [], rows: [], total: 0 });
     setFormOpen(true);
@@ -137,10 +184,14 @@ export default function SheetConnectModal({
         .catch(() => { /* ignore — usually means not yet authorized */ });
     }
   };
-  const closeForm = () => { setFormOpen(false); setEditingConfigId(null); setForm(emptyForm); };
+  const closeForm = () => { setFormOpen(false); setEditingConfigId(null); setForm(emptyForm); setTabsInfo(emptyTabsInfo); setSelectedTabs([]); };
+  const toggleTab = (title) => setSelectedTabs((prev) => (prev.includes(title) ? prev.filter((x) => x !== title) : [...prev, title]));
 
   const handleSave = async () => {
     if (!form.sheet_url.trim()) { toast.error('Sheet link is required'); return; }
+    if (tabsInfo.tabs.length > 0 && selectedTabs.length === 0) { toast.error('Select at least one tab to sync'); return; }
+    // Saved in the sheet's own tab order.
+    const tabs = tabsInfo.tabs.length ? tabsInfo.tabs.map((x) => x.title).filter((x) => selectedTabs.includes(x)) : undefined;
     setBusy(true);
     try {
       if (editingConfigId) {
@@ -148,6 +199,7 @@ export default function SheetConnectModal({
           name: form.name.trim(),
           sheet_url: form.sheet_url.trim(),
           source_type: form.source_type,
+          ...(tabs ? { tabs } : {}),
         }, { headers });
         toast.success(`${label} updated`);
       } else {
@@ -156,6 +208,7 @@ export default function SheetConnectModal({
           name: form.name.trim(),
           sheet_url: form.sheet_url.trim(),
           source_type: form.source_type,
+          ...(tabs ? { tabs } : {}),
         }, { headers });
         toast.success(`${label} added`);
       }
@@ -170,7 +223,8 @@ export default function SheetConnectModal({
     setSyncingId(configId);
     try {
       const r = await axios.post(`${API}/api/sheets/sync/${configId}`, {}, { headers });
-      toast.success(`Synced ${r.data.synced} rows`);
+      const { inserted = 0, updated = 0, skipped_existing: skipped = 0 } = r.data || {};
+      toast.success(`Synced — ${inserted} new, ${updated} updated${skipped ? `, ${skipped} already in leads (skipped)` : ''}`);
       await refreshStatus();
       onSaved && onSaved();
     } catch (e) {
@@ -262,8 +316,16 @@ export default function SheetConnectModal({
                     <Badge variant="outline" className="text-[10px]">{sourceLabel(cfg.source_type)}</Badge>
                   </div>
                   <p className={`text-[11px] ${textSecondary} mt-0.5`}>
-                    {cfg.last_synced_at ? `Last synced ${new Date(cfg.last_synced_at).toLocaleString()} · ${cfg.last_synced_count || 0} rows` : 'Never synced'}
+                    {cfg.last_synced_at
+                      ? `Last synced ${new Date(cfg.last_synced_at).toLocaleString()} · ${cfg.last_synced_count || 0} rows${cfg.last_skipped_existing ? ` · ${cfg.last_skipped_existing} already in leads` : ''}`
+                      : 'Never synced'}
                   </p>
+                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                    <Layers className={`h-3 w-3 ${textSecondary}`} />
+                    {(cfg.tabs || []).length
+                      ? cfg.tabs.map((t) => <Badge key={t} variant="outline" className="text-[10px] font-normal">{t}</Badge>)
+                      : <span className={`text-[10px] ${textSecondary}`}>First tab</span>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button size="sm" onClick={() => handleSyncNow(cfg.config_id)} disabled={syncingId === cfg.config_id || !oauthConnected} className="bg-[#10b981] hover:bg-[#059669] text-white h-8" data-testid={`sheet-sync-${cfg.config_id}`}>
@@ -294,6 +356,51 @@ export default function SheetConnectModal({
               <div>
                 <Label className={textPrimary}>Sheet Link</Label>
                 <Input value={form.sheet_url} onChange={(e) => setForm(p => ({ ...p, sheet_url: e.target.value }))} placeholder="https://docs.google.com/spreadsheets/d/..." className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`sheet-link-${sheetType}`} />
+                {/* Tab picker — appears once a valid link is pasted */}
+                {!oauthConnected && SHEET_URL_RE.test(form.sheet_url) && (
+                  <p className="text-xs text-[#f59e0b] mt-2">Connect Google above to see this sheet's tabs.</p>
+                )}
+                {tabsInfo.loading && (
+                  <p className={`text-xs mt-2 flex items-center gap-1 ${textSecondary}`}><RefreshCw className="h-3 w-3 animate-spin" /> Reading the sheet's tabs…</p>
+                )}
+                {tabsInfo.error && (
+                  <div className="mt-2 p-2.5 rounded-lg border border-[#ef4444]/40 bg-[#ef4444]/10 text-xs text-[#ef4444] flex gap-2" data-testid={`sheet-tabs-error-${sheetType}`}>
+                    <AlertCircle className="h-4 w-4 shrink-0" /> <span>{tabsInfo.error}</span>
+                  </div>
+                )}
+                {tabsInfo.tabs.length > 0 && (
+                  <div className={`mt-2 rounded-lg border ${borderColor} overflow-hidden`} data-testid={`sheet-tabs-${sheetType}`}>
+                    <div className={`px-3 py-2 ${bgSecondary} flex items-center justify-between gap-2 flex-wrap`}>
+                      <p className={`text-xs font-semibold ${textPrimary}`}>
+                        Tabs in {tabsInfo.title ? `“${tabsInfo.title}”` : 'this sheet'} · {selectedTabs.length} of {tabsInfo.tabs.length} selected
+                      </p>
+                      <div className="flex gap-2 text-[11px]">
+                        <button type="button" className="text-[#6366f1] hover:underline" onClick={() => setSelectedTabs(tabsInfo.tabs.map((x) => x.title))}>Select all</button>
+                        <button type="button" className={`${textSecondary} hover:underline`} onClick={() => setSelectedTabs([])}>Clear</button>
+                      </div>
+                    </div>
+                    <div className={`divide-y ${borderColor} max-h-60 overflow-y-auto`}>
+                      {tabsInfo.tabs.map((t) => (
+                        <label key={t.title} className="flex items-center gap-3 px-3 py-2 cursor-pointer" data-testid={`sheet-tab-${t.title}`}>
+                          <input type="checkbox" className="accent-[#6366f1]" checked={selectedTabs.includes(t.title)} onChange={() => toggleTab(t.title)} />
+                          <span className={`text-sm flex-1 min-w-0 truncate ${textPrimary}`}>{t.title}{t.hidden ? <span className={`text-[10px] ${textSecondary}`}> (hidden)</span> : null}</span>
+                          {t.total === 0 ? (
+                            <span className={`text-[11px] ${textSecondary}`}>Empty</span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-[11px] shrink-0">
+                              <span className={textSecondary}>{t.total} rows</span>
+                              <span className="px-1.5 py-0.5 rounded bg-[#10b981]/15 text-[#10b981]">{t.new} new</span>
+                              <span className={`px-1.5 py-0.5 rounded ${t.existing ? 'bg-[#f59e0b]/15 text-[#b45309]' : `${bgSecondary} ${textSecondary}`}`}>{t.existing} already in leads</span>
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    <p className={`px-3 py-1.5 text-[10px] ${textSecondary} border-t ${borderColor}`}>
+                      “Already in leads” = same phone or email as an existing lead. Sync skips those instead of creating duplicates.
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <Label className={textPrimary}>Source Type</Label>
@@ -342,7 +449,7 @@ export default function SheetConnectModal({
                   </a>
                 )}
                 <Button variant="ghost" onClick={closeForm}>Cancel</Button>
-                <Button onClick={handleSave} disabled={busy || !form.sheet_url.trim()} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid={`sheet-save-${sheetType}`}>
+                <Button onClick={handleSave} disabled={busy || !form.sheet_url.trim() || tabsInfo.loading || (tabsInfo.tabs.length > 0 && selectedTabs.length === 0)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid={`sheet-save-${sheetType}`}>
                   {busy ? 'Saving…' : editingConfigId ? 'Save Changes' : 'Add Sheet'}
                 </Button>
               </div>
