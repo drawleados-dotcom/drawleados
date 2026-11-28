@@ -526,7 +526,7 @@ const LeadsPageV2 = () => {
       loadStats();
       if (showOverview) loadOverview();
     } catch (error) {
-      toast.error('Failed to delete lead');
+      toast.error(error.response?.data?.detail || 'Failed to delete lead');
     }
   };
 
@@ -904,6 +904,14 @@ const LeadsPageV2 = () => {
   // Removes leads created by the sheet-sync bug (fixed) that have no name,
   // phone, or email at all — never touches a lead with any real data.
   const [cleaningDummy, setCleaningDummy] = useState(false);
+  // Lead delete rights — Admin/Super Admin always; others via their
+  // designation's Leads sub-options (HR Admin › Designation › Module Access).
+  const [leadPerms, setLeadPerms] = useState({ can_delete: false, can_cleanup_dummy: false });
+  useEffect(() => {
+    axios.get(`${API}/api/leads-v2/lead-permissions`, { headers })
+      .then((r) => setLeadPerms({ can_delete: !!r.data?.can_delete, can_cleanup_dummy: !!r.data?.can_cleanup_dummy }))
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cleanupDummyLeads = async () => {
     if (!window.confirm('Remove sheet-import leads with no name, phone, or email? This only affects leads with nothing filled in.')) return;
     setCleaningDummy(true);
@@ -1295,7 +1303,7 @@ const LeadsPageV2 = () => {
               </Button>
 
               {/* Cleanup — removes sheet-import leads with no name/phone/email at all */}
-              {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
+              {leadPerms.can_cleanup_dummy && (
                 <Button
                   onClick={cleanupDummyLeads}
                   disabled={cleaningDummy}
@@ -1438,7 +1446,7 @@ const LeadsPageV2 = () => {
             teamMembers={teamMembers}
             services={services}
             onEdit={openEditLead}
-            onDelete={deleteLead}
+            onDelete={leadPerms.can_delete ? deleteLead : null}
             onStageChange={updateLeadStage}
             onViewQuotation={setViewingQuotationId}
             formatDate={formatDate}
@@ -1858,7 +1866,7 @@ const LeadsPageV2 = () => {
               stages={stages}
               customFields={customFields}
               onEdit={openEditLead}
-              onDelete={deleteLead}
+              onDelete={leadPerms.can_delete ? deleteLead : null}
               onStageChange={updateLeadStage}
               onViewQuotation={setViewingQuotationId}
               formatDate={formatDate}
@@ -2738,7 +2746,29 @@ const LeadsPageV2 = () => {
 
             <DialogFooter className="flex sm:justify-between gap-2 w-full">
               <div className="flex gap-2">
-                {editingLead && (
+                {editingLead && leadPerms.can_delete && (
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${editingLead.name}"?`)) return;
+                      try {
+                        await axios.delete(`${API}/api/leads-v2/leads/${editingLead.lead_id}`, { headers });
+                        toast.success('Lead deleted');
+                        setShowAddLeadModal(false);
+                        setEditingLead(null);
+                        loadLeads();
+                        loadStats();
+                      } catch (e) {
+                        toast.error(e.response?.data?.detail || 'Failed to delete lead');
+                      }
+                    }}
+                    className="text-red-500 border-red-500/40 hover:text-red-600"
+                    data-testid="delete-lead-btn"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Delete Lead
+                  </Button>
+                )}
+                {editingLead && isAdmin && (
                   <Button
                     onClick={async () => {
                       if (!window.confirm(`Permanently delete "${editingLead.name}"? This cannot be undone.`)) return;
@@ -3929,6 +3959,18 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                         >
                           <Settings className="h-4 w-4" />
                         </Button>
+                        {onDelete && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => { e.stopPropagation(); onDelete(lead.lead_id); }}
+                            className="h-8 w-8 p-0 rounded-full text-red-400 hover:text-red-500"
+                            title="Delete lead"
+                            data-testid={`lead-delete-${lead.lead_id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

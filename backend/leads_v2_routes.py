@@ -647,10 +647,37 @@ async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Reques
     
     return updated_lead
 
+async def lead_permissions_for(user) -> Dict[str, bool]:
+    """Lead delete rights. Admin / Super Admin always have both; anyone else
+    gets them from their designation's Leads sub-options in HR Admin ›
+    Designation › Module Access (matched by title, like the BNI module)."""
+    role = ((user.get("role") if isinstance(user, dict) else getattr(user, "role", "")) or "").lower()
+    if role in ("super_admin", "admin"):
+        return {"can_delete": True, "can_cleanup_dummy": True}
+    title = ((user.get("designation") if isinstance(user, dict) else getattr(user, "designation", "")) or "").strip()
+    desg = None
+    if title:
+        desg = await db.designations.find_one(
+            {"title": {"$regex": f"^\\s*{re.escape(title)}\\s*$", "$options": "i"}},
+            {"_id": 0, "leads_delete": 1, "leads_dummy_delete": 1},
+        )
+    desg = desg or {}
+    return {"can_delete": bool(desg.get("leads_delete")), "can_cleanup_dummy": bool(desg.get("leads_dummy_delete"))}
+
+
+@leads_v2_router.get("/lead-permissions")
+async def get_lead_permissions(request: Request):
+    """What the current user may delete on the Leads page."""
+    user = await get_current_user_from_request(request)
+    return await lead_permissions_for(user)
+
+
 @leads_v2_router.delete("/leads/{lead_id}")
 async def delete_lead(lead_id: str, request: Request):
     """Soft-delete a lead"""
-    await get_current_user_from_request(request)
+    user = await get_current_user_from_request(request)
+    if not (await lead_permissions_for(user))["can_delete"]:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete leads — ask HR Admin to enable Lead Delete on your designation.")
     
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
@@ -669,9 +696,8 @@ async def cleanup_dummy_sheet_leads(request: Request):
     AND have no name/phone/email at all — never touches a lead with any
     real data in it."""
     user = await get_current_user_from_request(request)
-    role = (user.get("role") if isinstance(user, dict) else getattr(user, "role", "")) or ""
-    if role.lower() not in ("super_admin", "admin"):
-        raise HTTPException(status_code=403, detail="Only Super Admin / Admin can run this cleanup")
+    if not (await lead_permissions_for(user))["can_cleanup_dummy"]:
+        raise HTTPException(status_code=403, detail="You don't have permission to clean up dummy leads — ask HR Admin to enable Dummy Lead on your designation.")
 
     query = {
         "is_deleted": {"$ne": True},

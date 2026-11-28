@@ -41,6 +41,9 @@ class DesignationCreate(BaseModel):
     # BNI module sub-options
     bni_tabs: Optional[List[str]] = []  # which BNI sub-tabs are visible — empty = all
     bni_access: Optional[str] = "edit"  # 'view' | 'edit'
+    # Leads module sub-options — off unless granted (Admin/Super Admin always can)
+    leads_delete: Optional[bool] = False        # delete a single lead
+    leads_dummy_delete: Optional[bool] = False  # "Clean Up Dummy Leads"
 
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
@@ -65,6 +68,8 @@ class DesignationUpdate(BaseModel):
     operations_meetings_tab: Optional[bool] = None
     bni_tabs: Optional[List[str]] = None
     bni_access: Optional[str] = None
+    leads_delete: Optional[bool] = None
+    leads_dummy_delete: Optional[bool] = None
 
 # Dependency to get DB
 async def get_db():
@@ -142,6 +147,8 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "operations_meetings_tab": bool(data.operations_meetings_tab),
             "bni_tabs": data.bni_tabs or [],
             "bni_access": data.bni_access or "edit",
+            "leads_delete": bool(data.leads_delete),
+            "leads_dummy_delete": bool(data.leads_dummy_delete),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -207,6 +214,10 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["bni_tabs"] = data.bni_tabs
         if data.bni_access is not None:
             update_data["bni_access"] = data.bni_access
+        if data.leads_delete is not None:
+            update_data["leads_delete"] = data.leads_delete
+        if data.leads_dummy_delete is not None:
+            update_data["leads_dummy_delete"] = data.leads_dummy_delete
 
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         

@@ -1146,7 +1146,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], department_id: '', sub_department_id: '', approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false, bni_tabs: [], bni_access: 'edit' });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], department_id: '', sub_department_id: '', approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false, bni_tabs: [], bni_access: 'edit', leads_delete: false, leads_dummy_delete: false });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -7283,7 +7283,7 @@ function DesignationsDeptsTab({
     { value: 'my_profile', label: 'My Profile' },
 
     // Sales
-    { value: 'leads', label: 'Leads' },
+    { value: 'leads', label: 'Leads', hasSubOptions: true },
 
     // Operations / Web Dev
     { value: 'web_dev', label: 'Web Dev' },
@@ -7330,6 +7330,35 @@ function DesignationsDeptsTab({
     { value: 'role_players', label: 'Role Players' },
     { value: 'category', label: 'Category' },
   ];
+
+  // Leads module sub-options — shown inline once "Leads" is selected.
+  // Admin / Super Admin can always delete; everyone else only when ticked.
+  const LEADS_OPTIONS = [
+    { key: 'leads_delete', label: 'Lead Delete', hint: 'Delete a single lead (🗑 on the lead row and in Edit Lead)' },
+    { key: 'leads_dummy_delete', label: 'Dummy Lead', hint: '“Clean Up Dummy Leads” — removes sheet-import leads with no name, phone or email' },
+  ];
+  const leadsSubOptions = (state, setState, testid) => (
+    <div className={`mt-3 p-3 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid={testid}>
+      <p className={`text-xs font-semibold mb-2 ${textPrimary}`}>Leads access</p>
+      <div className="space-y-2">
+        {LEADS_OPTIONS.map((o) => (
+          <label key={o.key} className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-[#6366f1]"
+              checked={!!state[o.key]}
+              onChange={(e) => setState((prev) => ({ ...prev, [o.key]: e.target.checked }))}
+              data-testid={`${testid}-${o.key}`}
+            />
+            <span>
+              <span className={`text-sm ${textPrimary}`}>{o.label}</span>
+              <span className={`block text-[11px] ${textSecondary}`}>{o.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 
   // Website stages for approval granularity
   const WEBSITE_APPROVAL_STAGES = [
@@ -7680,11 +7709,14 @@ function DesignationsDeptsTab({
                                 return;
                               }
                               const access = editingDesignation.module_access || [];
+                              const removing = access.includes(m.value);
                               setEditingDesignation(prev => ({
                                 ...prev,
-                                module_access: access.includes(m.value)
+                                module_access: removing
                                   ? access.filter(x => x !== m.value)
-                                  : [...access, m.value]
+                                  : [...access, m.value],
+                                // Turning Leads off also drops its sub-options.
+                                ...(m.value === 'leads' && removing ? { leads_delete: false, leads_dummy_delete: false } : {}),
                               }));
                             }}
                             className={`px-3 py-1 rounded-full text-sm flex items-center gap-1.5 ${
@@ -7698,6 +7730,7 @@ function DesignationsDeptsTab({
                           </button>
                         ))}
                       </div>
+                      {(editingDesignation.module_access || []).includes('leads') && leadsSubOptions(editingDesignation, setEditingDesignation, 'desg-edit-leads')}
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end mt-6">
@@ -7826,12 +7859,16 @@ function DesignationsDeptsTab({
                                 setShowBniConfigModal(true);
                                 return;
                               }
-                              setNewDesignation(prev => ({
-                                ...prev,
-                                module_access: prev.module_access.includes(m.value)
-                                  ? prev.module_access.filter(x => x !== m.value)
-                                  : [...prev.module_access, m.value]
-                              }));
+                              setNewDesignation(prev => {
+                                const removing = prev.module_access.includes(m.value);
+                                return {
+                                  ...prev,
+                                  module_access: removing
+                                    ? prev.module_access.filter(x => x !== m.value)
+                                    : [...prev.module_access, m.value],
+                                  ...(m.value === 'leads' && removing ? { leads_delete: false, leads_dummy_delete: false } : {}),
+                                };
+                              });
                             }}
                             className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 transition-all ${
                               newDesignation.module_access.includes(m.value)
@@ -7844,6 +7881,7 @@ function DesignationsDeptsTab({
                           </button>
                         ))}
                       </div>
+                      {newDesignation.module_access.includes('leads') && leadsSubOptions(newDesignation, setNewDesignation, 'desg-create-leads')}
                     </div>
                     
                     {/* Approval Departments - shown when "approvals" module is selected */}
