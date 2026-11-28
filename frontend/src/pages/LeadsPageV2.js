@@ -17,6 +17,7 @@ import SheetConnectModal from '../components/SheetConnectModal';
 import LeadInvoiceRaiseModal from '../components/finance/LeadInvoiceRaiseModal';
 import LeadQuotationModal from '../components/leads/LeadQuotationModal';
 import ViewQuotationModal from '../components/leads/ViewQuotationModal';
+import WebsiteIntegrationPanel from '../components/leads/WebsiteIntegrationPanel';
 import { useAuth } from '../contexts/AuthContext';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import {
@@ -141,6 +142,8 @@ const LeadsPageV2 = () => {
   // third pipeline value — `pipeline` still only ever drives the leads/stages/
   // stats loaders below.
   const [showOverview, setShowOverview] = useState(false);
+  // Website tab: API key that connects the website's lead forms (WebsiteIntegrationPanel).
+  const [showWebsite, setShowWebsite] = useState(false);
   const [overviewRange, setOverviewRange] = useState('today'); // 'today' | 'yesterday' | 'week' | 'month'
   const [overviewData, setOverviewData] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -1393,15 +1396,20 @@ const LeadsPageV2 = () => {
             { key: 'pre_sales', label: 'Pre-sales' },
             { key: 'sales', label: 'Sales' },
             { key: 'sales_kit', label: 'Sales Kit' },
+            { key: 'website', label: 'Website' },
           ].map(tab => {
-            const isActive = tab.key === 'overview' ? showOverview : (!showOverview && pipeline === tab.key);
+            const isActive = tab.key === 'overview' ? showOverview
+              : tab.key === 'website' ? showWebsite
+              : (!showOverview && !showWebsite && pipeline === tab.key);
             return (
               <button
                 key={tab.key}
                 onClick={() => {
-                  if (tab.key === 'overview') { setShowOverview(true); return; }
+                  if (tab.key === 'overview') { setShowOverview(true); setShowWebsite(false); return; }
+                  if (tab.key === 'website') { setShowWebsite(true); setShowOverview(false); return; }
                   if (tab.key === 'sales_kit') { window.location.href = '/sales-kit'; return; }
                   setShowOverview(false);
+                  setShowWebsite(false);
                   setPipeline(tab.key);
                   setFilterStage(null);
                 }}
@@ -1434,6 +1442,16 @@ const LeadsPageV2 = () => {
             onStageChange={updateLeadStage}
             onViewQuotation={setViewingQuotationId}
             formatDate={formatDate}
+            isDark={isDark}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+          />
+        ) : showWebsite ? (
+          <WebsiteIntegrationPanel
+            isAdmin={isAdmin}
             isDark={isDark}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
@@ -4120,7 +4138,7 @@ const PreviewBoard = ({ leads, stages, selectedLead, setSelectedLead, onEdit, on
               {selectedLead.notes && (
                 <div>
                   <label className={`text-xs ${textSecondary} block mb-1`}>Notes</label>
-                  <p className={`${textPrimary} text-sm`}>{selectedLead.notes}</p>
+                  <p className={`${textPrimary} text-sm whitespace-pre-line`}>{selectedLead.notes}</p>
                 </div>
               )}
               {customFields.length > 0 && Object.keys(selectedLead.custom_fields || {}).length > 0 && (

@@ -5,6 +5,9 @@ from datetime import datetime, timezone, timedelta
 import uuid
 import httpx
 import asyncio
+import hashlib
+import re
+import secrets
 
 from access import is_admin
 
@@ -1430,6 +1433,11 @@ async def delete_source(source_id: str, request: Request):
         {"source_id": source_id},
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
     )
+    # A deleted source's API keys stop working too (see LEAD SOURCE API KEYS).
+    await db.lead_api_keys.update_many(
+        {"source_id": source_id, "revoked": {"$ne": True}},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc)}},
+    )
     return {"message": "Source deleted"}
 
 # ============== LOST REASONS ROUTES ==============
@@ -1830,3 +1838,340 @@ async def backfill_from_custom_fields(request: Request):
             await db.leads_v2.update_one({"lead_id": ld["lead_id"]}, {"$set": updates})
             updated += 1
     return {"scanned": total, "updated": updated, "message": f"Backfill complete — {updated}/{total} leads updated."}
+
+
+# ============== LEAD SOURCE API KEYS ==============
+# Sales Department > Website tab > "Generate API key". The key is pasted into
+# an outside system (the company website's Admin > Lead Source page), which
+# then POSTs each new enquiry to /public/leads below; the lead lands in
+# Pre-sales > Lead tagged with that key's source ("Website"). Only a SHA-256
+# of the key is stored: the full key is returned once, when generated.
+
+LEAD_API_KEY_PREFIX = "dlk_"
+LEAD_API_CREATOR = "lead_api"  # created_by on every lead that came in through a key
+
+
+class LeadApiKeyCreate(BaseModel):
+    source_id: str = ''
+    # Used instead of source_id by Sales Department > Website: the source with
+    # this name (any letter case) — created if it doesn't exist yet.
+    source_name: str = ''
+    label: str = ''
+
+
+def _hash_api_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _iso_utc(value: Any) -> Any:
+    """Mongo hands back naive UTC datetimes; tag them so the browser shows local time."""
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
+    return value
+
+
+def _api_key_out(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: _iso_utc(v) for k, v in doc.items() if k not in ("_id", "key_hash")}
+
+
+async def _require_lead_admin(request: Request) -> dict:
+    user = await get_current_user_from_request(request)
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Only admins can manage API keys")
+    return user
+
+
+async def _find_key_source(source_id: str, source_name: str) -> Optional[dict]:
+    """The lead source a key belongs to, by id or (case-insensitive) name."""
+    if source_id:
+        query: Dict[str, Any] = {"source_id": source_id}
+    elif source_name.strip():
+        query = {"name": {"$regex": f"^{re.escape(source_name.strip())}$", "$options": "i"}}
+    else:
+        return None
+    return await db.lead_sources.find_one({**query, "is_deleted": {"$ne": True}}, {"_id": 0})
+
+
+@leads_v2_router.get("/api-keys")
+async def list_lead_api_keys(request: Request, source_id: Optional[str] = None, source_name: Optional[str] = None):
+    """Active API keys (never the keys themselves — only a short preview)."""
+    await _require_lead_admin(request)
+    query: Dict[str, Any] = {"revoked": {"$ne": True}}
+    if source_id or source_name:
+        source = await _find_key_source(source_id or "", source_name or "")
+        if not source:
+            return []
+        query["source_id"] = source["source_id"]
+    keys = await db.lead_api_keys.find(query, {"_id": 0, "key_hash": 0}).sort("created_at", -1).to_list(200)
+    return [_api_key_out(k) for k in keys]
+
+
+@leads_v2_router.post("/api-keys")
+async def create_lead_api_key(data: LeadApiKeyCreate, request: Request):
+    """Generate a key for a lead source. The response is the only time the full key is shown."""
+    user = await _require_lead_admin(request)
+    source = await _find_key_source(data.source_id, data.source_name)
+    if not source and not data.source_id and data.source_name.strip():
+        source = {
+            "source_id": f"src_{uuid.uuid4().hex[:8]}",
+            "name": data.source_name.strip(),
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+            "is_deleted": False,
+        }
+        await db.lead_sources.insert_one(dict(source))
+    if not source:
+        raise HTTPException(status_code=404, detail="Lead source not found")
+
+    api_key = LEAD_API_KEY_PREFIX + secrets.token_urlsafe(32)
+    key_doc = {
+        "key_id": f"key_{uuid.uuid4().hex[:12]}",
+        "source_id": source["source_id"],
+        "source_name": source["name"],
+        "label": data.label.strip() or source["name"],
+        "key_preview": api_key[:12],
+        "key_hash": _hash_api_key(api_key),
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", ""),
+        "created_at": datetime.now(timezone.utc),
+        "last_used_at": None,
+        "leads_received": 0,
+        "revoked": False,
+    }
+    await db.lead_api_keys.insert_one(dict(key_doc))
+    return {**_api_key_out(key_doc), "api_key": api_key}
+
+
+@leads_v2_router.delete("/api-keys/{key_id}")
+async def revoke_lead_api_key(key_id: str, request: Request):
+    """Revoke a key: the outside system's next request with it is rejected."""
+    user = await _require_lead_admin(request)
+    result = await db.lead_api_keys.update_one(
+        {"key_id": key_id, "revoked": {"$ne": True}},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc), "revoked_by": user["user_id"]}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"message": "API key revoked"}
+
+
+# ============== PUBLIC LEAD INTAKE (API KEY) ==============
+# Called server-to-server by the outside system holding the key — never from
+# browser JS, where the key would be visible to every visitor.
+
+LEAD_API_DEDUP_WINDOW = timedelta(hours=24)
+
+# Lead field -> payload keys it may arrive under (first non-empty wins). Every
+# other key sent is kept in custom_fields, so nothing the visitor typed is lost.
+LEAD_API_FIELD_KEYS = {
+    "name": ("name", "full_name", "fullname"),
+    "phone": ("phone", "mobile", "phone_number", "contact", "whatsapp"),
+    "email": ("email", "email_address"),
+    "company_name": ("company_name", "company", "business_name"),
+    "location": ("location", "city"),
+    "website": ("website", "site", "url"),
+    "service": ("service", "services"),
+    "what_do_you_do": ("what_do_you_do",),
+    "notes": ("notes", "message", "comments", "requirement"),
+    "source": ("source", "lead_source"),
+}
+# The sender's own id for the lead (e.g. its admin-panel row id). Optional,
+# but when sent, retries are safe: the same id never creates a second lead.
+LEAD_API_ID_KEYS = ("external_id", "website_lead_id")
+
+
+def _lead_api_value(value: Any) -> str:
+    """Form checkboxes (services[]) arrive as lists; everything else as scalars."""
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(v).strip() for v in value if str(v).strip())
+    return "" if value is None else str(value).strip()
+
+
+def _phone_key(phone: str) -> str:
+    """Last 10 digits, so '+91 98765 43210' and '9876543210' match."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return digits[-10:]
+
+
+def _api_key_from_request(request: Request) -> str:
+    key = request.headers.get("x-api-key", "").strip()
+    if not key:
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            key = auth[7:].strip()
+    return key
+
+
+async def _read_lead_api_payload(request: Request) -> Dict[str, str]:
+    """Accept JSON (PHP json_encode) or a plain form post (http_build_query)."""
+    if "application/json" in request.headers.get("content-type", ""):
+        try:
+            raw = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Body is not valid JSON")
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    else:
+        form = await request.form()
+        raw = {}
+        for key in form.keys():
+            values = form.getlist(key)
+            raw[key[:-2] if key.endswith("[]") else key] = values if len(values) > 1 else values[0]
+    return {str(k).strip().lower(): _lead_api_value(v) for k, v in raw.items()}
+
+
+async def _match_existing_name(collection, name: str) -> Optional[str]:
+    """The stored spelling of `name` in a name-keyed list (sources, services), if present."""
+    if not name:
+        return None
+    existing = await collection.find_one(
+        {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "is_deleted": {"$ne": True}},
+        {"_id": 0, "name": 1},
+    )
+    return existing["name"] if existing else None
+
+
+async def _api_key_doc(request: Request) -> Dict[str, Any]:
+    """The active key the request carries (and mark it used), or 401."""
+    api_key = _api_key_from_request(request)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key (send it in the X-API-Key header)")
+    key_doc = await db.lead_api_keys.find_one(
+        {"key_hash": _hash_api_key(api_key), "revoked": {"$ne": True}}, {"_id": 0}
+    )
+    if not key_doc:
+        raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+    await db.lead_api_keys.update_one(
+        {"key_id": key_doc["key_id"]}, {"$set": {"last_used_at": datetime.now(timezone.utc)}}
+    )
+    return key_doc
+
+
+async def _key_source_name(key_doc: Dict[str, Any]) -> str:
+    source = await db.lead_sources.find_one({"source_id": key_doc["source_id"]}, {"_id": 0, "name": 1})
+    return source["name"] if source else key_doc["source_name"]
+
+
+def _lead_api_date(value: str, today: str) -> str:
+    """A sender-given YYYY-MM-DD date the lead first came in (e.g. older leads sent later); today otherwise."""
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return today
+    return parsed if "2000-01-01" <= parsed <= today else today
+
+
+@leads_v2_router.get("/public/leads")
+async def test_api_lead_connection(request: Request):
+    """Connection test for the sender: checks the key without creating a lead."""
+    key_doc = await _api_key_doc(request)
+    source = await _key_source_name(key_doc)
+    return {
+        "success": True,
+        "source": source,
+        "message": f"Connected. Leads sent with this key arrive in Pre-sales > Lead with source \"{source}\".",
+    }
+
+
+@leads_v2_router.post("/public/leads")
+async def receive_api_lead(request: Request):
+    """Create a Pre-sales lead in the 'Lead' stage from an outside system holding an API key."""
+    key_doc = await _api_key_doc(request)
+    now = datetime.now(timezone.utc)
+
+    payload = await _read_lead_api_payload(request)
+    fields: Dict[str, str] = {}
+    used_keys = set(LEAD_API_ID_KEYS) | {"date_of_lead"}
+    for field, keys in LEAD_API_FIELD_KEYS.items():
+        fields[field] = next((payload[k] for k in keys if payload.get(k)), "")
+        used_keys.update(keys)
+    external_id = next((payload[k] for k in LEAD_API_ID_KEYS if payload.get(k)), "")
+
+    if not (fields["name"] or fields["phone"] or fields["email"]):
+        raise HTTPException(status_code=400, detail="Send at least a name, phone or email")
+
+    # --- Duplicate guard: sender retries / double-clicked submit buttons ---
+    if external_id:
+        # Scoped to the key's source, so regenerating a key keeps the guard.
+        existing = await db.leads_v2.find_one(
+            {"external_lead_id": external_id, "api_source_id": key_doc["source_id"], "is_deleted": {"$ne": True}},
+            {"_id": 0, "lead_id": 1},
+        )
+        if existing:
+            return {"success": True, "duplicate": True, "lead_id": existing["lead_id"]}
+    else:
+        email_key = fields["email"].lower()
+        phone_key = _phone_key(fields["phone"])
+        recent = await db.leads_v2.find(
+            {
+                "created_by": LEAD_API_CREATOR,
+                "created_at": {"$gte": now - LEAD_API_DEDUP_WINDOW},
+                "is_deleted": {"$ne": True},
+            },
+            {"_id": 0, "lead_id": 1, "email": 1, "phone": 1},
+        ).to_list(1000)
+        for lead in recent:
+            if (email_key and (lead.get("email") or "").lower() == email_key) or (
+                phone_key and _phone_key(lead.get("phone") or "") == phone_key
+            ):
+                return {"success": True, "duplicate": True, "lead_id": lead["lead_id"]}
+
+    # --- Stage: Pre-sales "Lead" (the stage the Lead Sheet sync fills) ---
+    pre_sales = {"is_deleted": {"$ne": True}, "$and": [_pipeline_match("pre_sales")]}
+    stage = await db.lead_stages.find_one(
+        {**pre_sales, "name": {"$regex": "^lead$", "$options": "i"}}, {"_id": 0, "stage_id": 1}
+    ) or await db.lead_stages.find_one(pre_sales, {"_id": 0, "stage_id": 1}, sort=[("order", 1)])
+
+    # --- Source: the key's source, unless the sender names its own ---
+    if fields["source"]:
+        source = await _match_existing_name(db.lead_sources, fields["source"])
+        if not source:
+            source = fields["source"]
+            await db.lead_sources.insert_one({
+                "source_id": f"src_{uuid.uuid4().hex[:8]}",
+                "name": source,
+                "created_by": LEAD_API_CREATOR,
+                "created_at": now,
+                "is_deleted": False,
+            })
+    else:
+        source = await _key_source_name(key_doc)
+
+    # Use the ERP's own spelling of the service so the Services filter matches it.
+    service = await _match_existing_name(db.lead_services, fields["service"]) or fields["service"]
+
+    lead_doc = {
+        "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+        "name": fields["name"] or fields["phone"] or fields["email"],
+        "email": fields["email"],
+        "phone": fields["phone"],
+        "location": fields["location"],
+        "website": fields["website"],
+        "social_media": "",
+        "company_name": fields["company_name"],
+        "what_do_you_do": fields["what_do_you_do"],
+        "source": source,
+        "lead_owner": "",
+        "service": service,
+        "priority": "Medium",
+        "lead_type": "Inbound",
+        "date_of_lead": _lead_api_date(payload.get("date_of_lead", ""), now.astimezone(IST).strftime("%Y-%m-%d")),
+        "industry": "",
+        "estimation": 0,
+        "quotation_link": "",
+        "proposal_link": "",
+        "notes": fields["notes"],
+        "stage_id": stage["stage_id"] if stage else "",
+        "custom_fields": {k: v for k, v in payload.items() if k not in used_keys and v},
+        "pipeline": "pre_sales",
+        "external_lead_id": external_id,
+        "api_key_id": key_doc["key_id"],
+        "api_source_id": key_doc["source_id"],
+        "created_by": LEAD_API_CREATOR,
+        "created_at": now,
+        "updated_at": now,
+        "is_deleted": False,
+    }
+    await db.leads_v2.insert_one(dict(lead_doc))
+    await db.lead_api_keys.update_one({"key_id": key_doc["key_id"]}, {"$inc": {"leads_received": 1}})
+    return {"success": True, "duplicate": False, "lead_id": lead_doc["lead_id"]}
