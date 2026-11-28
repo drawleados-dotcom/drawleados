@@ -10,12 +10,15 @@ const INTAKE_URL = `${API || window.location.origin}/api/leads-v2/public/leads`;
 // Lead source the website's keys belong to: matched to an existing source in
 // any letter case ("website" / "Website"), created on the first key otherwise.
 const WEBSITE_SOURCE = 'Website';
+// The website's sub_source for each of its forms; leads show as "Website/Popup" etc.
+const WEBSITE_FORMS = ['Popup', 'Calendar', 'WhatsApp'];
 
 const SAMPLE_BODY = `{
   "external_id": "booking-12",
   "name": "Kumar Dass",
   "phone": "9876543210",
   "email": "kumar@example.com",
+  "sub_source": "Calendar",
   "notes": "Calendar booking · Call: 2 Dec, 3:00 PM",
   "date_of_lead": "2026-11-28"
 }`;
@@ -37,7 +40,8 @@ const copy = async (text) => {
  * Sales Department > Website tab. An admin generates an API key here and
  * pastes it, with the endpoint URL, into the website's Admin Panel > Lead
  * Source > "Drawlead OS connection". From then on every calendar booking and
- * WhatsApp chat on the website lands in Pre-sales > Lead with source "Website".
+ * WhatsApp chat on the website lands in Pre-sales > Lead with source
+ * "Website/Popup", "Website/Calendar" or "Website/WhatsApp" (the form it came through).
  */
 const WebsiteIntegrationPanel = ({ isAdmin, isDark, textPrimary, textSecondary, borderColor, bgCard, bgSecondary }) => {
   const token = localStorage.getItem('session_token');
@@ -131,8 +135,13 @@ const WebsiteIntegrationPanel = ({ isAdmin, isDark, textPrimary, textSecondary, 
             </div>
             <p className={`text-sm mt-1 ${textSecondary}`}>
               Connect the Drawlead website so every calendar booking and WhatsApp chat lands in{' '}
-              <span className={textPrimary}>Pre-sales → Lead</span> automatically, with source{' '}
-              <span className={textPrimary}>&ldquo;{WEBSITE_SOURCE}&rdquo;</span>.
+              <span className={textPrimary}>Pre-sales → Lead</span> automatically. The source shows which form it came through:{' '}
+              {WEBSITE_FORMS.map((form, i) => (
+                <React.Fragment key={form}>
+                  {i > 0 && (i === WEBSITE_FORMS.length - 1 ? ' or ' : ', ')}
+                  <span className={textPrimary}>&ldquo;{WEBSITE_SOURCE}/{form}&rdquo;</span>
+                </React.Fragment>
+              ))}.
             </p>
           </div>
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.cls}`} data-testid="website-connection-status">{status.text}</span>
@@ -203,11 +212,11 @@ const WebsiteIntegrationPanel = ({ isAdmin, isDark, textPrimary, textSecondary, 
             <li>Open the website&apos;s <span className={textPrimary}>Admin Panel → Lead Source</span>.</li>
             <li>In <span className={textPrimary}>Drawlead OS connection</span>, paste the <span className={textPrimary}>Endpoint URL</span> and the <span className={textPrimary}>API key</span>.</li>
             <li>Click <span className={textPrimary}>Save &amp; test</span>. It should say it&apos;s connected.</li>
-            <li>Click <span className={textPrimary}>Send all leads to OS</span> once, to bring in the leads the website already has.</li>
           </ol>
           <p className={`text-sm flex items-start gap-2 ${textSecondary}`}>
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-emerald-500" />
-            After that, new website leads appear here on their own. A lead sent twice is only added once.
+            That&apos;s all. The leads the website already has come over on their own in the background, and every new
+            lead arrives as soon as it&apos;s submitted. If the OS is down, the website tries again later. A lead sent twice is only added once.
           </p>
         </div>
       </div>
@@ -253,7 +262,9 @@ const WebsiteIntegrationPanel = ({ isAdmin, isDark, textPrimary, textSecondary, 
             <pre className={`${bgSecondary} ${textPrimary} rounded-md p-3 text-xs overflow-x-auto`}>{SAMPLE_BODY}</pre>
             <p>
               Only one of name, phone or email is required. <span className="font-mono">external_id</span> stops the same
-              lead being added twice. Other accepted fields: company, city, service, message. Anything else is saved on the lead.
+              lead being added twice. <span className="font-mono">sub_source</span> is the form the lead came through, shown
+              after the source (&ldquo;{WEBSITE_SOURCE}/Calendar&rdquo;). Other accepted fields: company, city, service, message.
+              Anything else is saved on the lead.
             </p>
           </div>
         </details>

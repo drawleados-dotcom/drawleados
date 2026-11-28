@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, field_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta
 import uuid
 import httpx
@@ -1974,6 +1974,9 @@ LEAD_API_FIELD_KEYS = {
     "what_do_you_do": ("what_do_you_do",),
     "notes": ("notes", "message", "comments", "requirement"),
     "source": ("source", "lead_source"),
+    # Which of the sender's forms the lead came through; shown after the
+    # source, e.g. "Website/Popup", "Website/Calendar", "Website/WhatsApp".
+    "sub_source": ("sub_source",),
 }
 # The sender's own id for the lead (e.g. its admin-panel row id). Optional,
 # but when sent, retries are safe: the same id never creates a second lead.
@@ -2052,6 +2055,32 @@ async def _key_source_name(key_doc: Dict[str, Any]) -> str:
     return source["name"] if source else key_doc["source_name"]
 
 
+async def _api_lead_source(key_doc: Dict[str, Any], fields: Dict[str, str], now: datetime) -> Tuple[str, str]:
+    """(the lead's source, the base it is built on). The base is the key's
+    source unless the sender names its own; a sub_source is added after a
+    slash ("Website" + "Popup" -> "Website/Popup"). A source the Sources list
+    doesn't have yet is added to it, so the Source filter offers it."""
+    base = fields["source"] or await _key_source_name(key_doc)
+    sub = fields["sub_source"].strip(" /")
+    wanted = f"{base}/{sub}" if sub else base
+    if not fields["source"] and not sub:
+        return base, base  # the key's own source, already in the list
+    source = await _match_existing_name(db.lead_sources, wanted)
+    if not source:
+        source = wanted
+        await db.lead_sources.update_one(
+            {"name": source, "is_deleted": {"$ne": True}},
+            {"$setOnInsert": {
+                "source_id": f"src_{uuid.uuid4().hex[:8]}",
+                "created_by": LEAD_API_CREATOR,
+                "created_at": now,
+                "is_deleted": False,
+            }},
+            upsert=True,
+        )
+    return source, base
+
+
 def _lead_api_date(value: str, today: str) -> str:
     """A sender-given YYYY-MM-DD date the lead first came in (e.g. older leads sent later); today otherwise."""
     try:
@@ -2090,14 +2119,23 @@ async def receive_api_lead(request: Request):
     if not (fields["name"] or fields["phone"] or fields["email"]):
         raise HTTPException(status_code=400, detail="Send at least a name, phone or email")
 
+    source, base_source = await _api_lead_source(key_doc, fields, now)
+
     # --- Duplicate guard: sender retries / double-clicked submit buttons ---
     if external_id:
         # Scoped to the key's source, so regenerating a key keeps the guard.
         existing = await db.leads_v2.find_one(
             {"external_lead_id": external_id, "api_source_id": key_doc["source_id"], "is_deleted": {"$ne": True}},
-            {"_id": 0, "lead_id": 1},
+            {"_id": 0, "lead_id": 1, "source": 1},
         )
         if existing:
+            # A lead added before the sender sent a sub_source still says just
+            # "Website": sending it again fills in "Website/Popup" etc. A source
+            # someone changed by hand is left alone.
+            if source != existing.get("source") and (existing.get("source") or "").lower() == base_source.lower():
+                await db.leads_v2.update_one(
+                    {"lead_id": existing["lead_id"]}, {"$set": {"source": source, "updated_at": now}}
+                )
             return {"success": True, "duplicate": True, "lead_id": existing["lead_id"]}
     else:
         email_key = fields["email"].lower()
@@ -2121,21 +2159,6 @@ async def receive_api_lead(request: Request):
     stage = await db.lead_stages.find_one(
         {**pre_sales, "name": {"$regex": "^lead$", "$options": "i"}}, {"_id": 0, "stage_id": 1}
     ) or await db.lead_stages.find_one(pre_sales, {"_id": 0, "stage_id": 1}, sort=[("order", 1)])
-
-    # --- Source: the key's source, unless the sender names its own ---
-    if fields["source"]:
-        source = await _match_existing_name(db.lead_sources, fields["source"])
-        if not source:
-            source = fields["source"]
-            await db.lead_sources.insert_one({
-                "source_id": f"src_{uuid.uuid4().hex[:8]}",
-                "name": source,
-                "created_by": LEAD_API_CREATOR,
-                "created_at": now,
-                "is_deleted": False,
-            })
-    else:
-        source = await _key_source_name(key_doc)
 
     # Use the ERP's own spelling of the service so the Services filter matches it.
     service = await _match_existing_name(db.lead_services, fields["service"]) or fields["service"]
